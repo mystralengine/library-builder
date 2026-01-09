@@ -37,10 +37,17 @@ jobs:
           #   variant: gpu
           #   arch: x64
           # Phase 4: WASM GPU
-          - os: ubuntu-latest
-            platform: wasm
+          # - os: ubuntu-latest
+          #   platform: wasm
+          #   variant: gpu
+          #   arch: ""
+          #   config: Release
+          # Windows Debug build
+          - os: windows-latest
+            platform: win
             variant: gpu
-            arch: ""
+            arch: x64
+            config: Debug
           # Phase 5: ARM64 platforms (later)
           # - os: ubuntu-24.04-arm
           #   platform: linux
@@ -143,7 +150,7 @@ jobs:
       #   run: |
       #     python3 build-skia.py ${{ matrix.platform }} -config Debug --shallow -branch ${{ env.SKIA_BRANCH }}
 
-      - name: Build Skia (Release)
+      - name: Build Skia (${{ matrix.config || 'Release' }})
         if: ${{ !inputs.test_mode }}
         shell: bash
         run: |
@@ -151,16 +158,19 @@ jobs:
           if [ -n "${{ matrix.arch }}" ]; then
             ARCH_ARG="-archs ${{ matrix.arch }}"
           fi
-          python3 build-skia.py ${{ matrix.platform }} -variant ${{ matrix.variant }} -config Release --shallow -branch ${{ env.SKIA_BRANCH }} $ARCH_ARG
+          CONFIG="${{ matrix.config || 'Release' }}"
+          python3 build-skia.py ${{ matrix.platform }} -variant ${{ matrix.variant }} -config $CONFIG --shallow -branch ${{ env.SKIA_BRANCH }} $ARCH_ARG
 
       - name: Set archive name
         id: archive
         shell: bash
         run: |
+          CONFIG="${{ matrix.config || 'Release' }}"
+          CONFIG_LOWER=$(echo "$CONFIG" | tr '[:upper:]' '[:lower:]')
           if [ -n "${{ matrix.arch }}" ]; then
-            echo "name=skia-build-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.variant }}" >> $GITHUB_OUTPUT
+            echo "name=skia-build-${{ matrix.platform }}-${{ matrix.arch }}-${{ matrix.variant }}-${CONFIG_LOWER}" >> $GITHUB_OUTPUT
           else
-            echo "name=skia-build-${{ matrix.platform }}-${{ matrix.variant }}" >> $GITHUB_OUTPUT
+            echo "name=skia-build-${{ matrix.platform }}-${{ matrix.variant }}-${CONFIG_LOWER}" >> $GITHUB_OUTPUT
           fi
 
       - name: Create dummy files for test mode
@@ -209,9 +219,10 @@ jobs:
           draft: false
           prerelease: ${{ inputs.test_mode }}
           files: |
-            # ./skia-build-mac-universal-gpu/skia-build-mac-universal-gpu.zip
-            # ./skia-build-win-x64-gpu/skia-build-win-x64-gpu.zip
-            # ./skia-build-linux-x64-gpu/skia-build-linux-x64-gpu.zip
-            ./skia-build-wasm-gpu/skia-build-wasm-gpu.zip
+            # ./skia-build-mac-universal-gpu-release/skia-build-mac-universal-gpu-release.zip
+            # ./skia-build-win-x64-gpu-release/skia-build-win-x64-gpu-release.zip
+            # ./skia-build-linux-x64-gpu-release/skia-build-linux-x64-gpu-release.zip
+            # ./skia-build-wasm-gpu-release/skia-build-wasm-gpu-release.zip
+            ./skia-build-win-x64-gpu-debug/skia-build-win-x64-gpu-debug.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
