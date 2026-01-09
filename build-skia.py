@@ -663,6 +663,24 @@ class SkiaBuildScript:
                                 shutil.copy2(src_file, dest_file)
                                 # print(f"Copied {rel_path} to {dest_file}")
 
+    def package_icu_data(self, dest_dir):
+        """Copy ICU data file (icudtl.dat) to package directory."""
+        if USE_LIBGRAPHEME:
+            colored_print("Skipping ICU data packaging (using libgrapheme)", Colors.OKBLUE)
+            return
+
+        # ICU data file location in Skia's third_party
+        icu_data_src = SKIA_SRC_DIR / "third_party" / "externals" / "icu" / "common" / "icudtl.dat"
+
+        if not icu_data_src.exists():
+            colored_print(f"Warning: ICU data file not found at {icu_data_src}", Colors.WARNING)
+            return
+
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        icu_data_dest = dest_dir / "icudtl.dat"
+        shutil.copy2(icu_data_src, icu_data_dest)
+        colored_print(f"Copied ICU data file to {icu_data_dest}", Colors.OKGREEN)
+
     def package_generated_dawn_headers(self, build_dir, dest_dir):
         """Copy generated Dawn headers from build output to package."""
         gen_include_dir = build_dir / "gen" / "third_party" / "dawn" / "include"
@@ -879,9 +897,11 @@ class SkiaBuildScript:
                 self.combine_libraries("ios", arch)
 
             self.package_headers(BASE_DIR / "include")
+            self.package_icu_data(BASE_DIR / "share")
             self.create_xcframework(with_headers=True)
         else:
             self.package_headers(BASE_DIR / "include")
+            self.package_icu_data(BASE_DIR / "share")
 
         # Copy generated Dawn headers (for Graphite WebGPU backend)
         if self.variant == "gpu":
@@ -920,6 +940,15 @@ class SkiaBuildScript:
                         file_path = Path(root) / file
                         arcname = file_path.relative_to(BASE_DIR)
                         zipf.write(file_path, arcname)
+
+                # Add share directory (ICU data, etc.)
+                share_dir = BASE_DIR / "share"
+                if share_dir.exists():
+                    for root, _, files in os.walk(share_dir):
+                        for file in files:
+                            file_path = Path(root) / file
+                            arcname = file_path.relative_to(BASE_DIR)
+                            zipf.write(file_path, arcname)
 
                 # Add all platform lib directories for current variant
                 for platform in ["mac", "ios", "win", "linux", "wasm"]:
