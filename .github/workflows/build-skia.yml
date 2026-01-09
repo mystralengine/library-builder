@@ -144,6 +144,7 @@ jobs:
 
       - name: Build Skia (Release)
         if: ${{ !inputs.test_mode }}
+        shell: bash
         run: |
           ARCH_ARG=""
           if [ -n "${{ matrix.arch }}" ]; then
@@ -163,6 +164,7 @@ jobs:
 
       - name: Create dummy files for test mode
         if: ${{ inputs.test_mode }}
+        shell: bash
         run: |
           mkdir -p build/include
           mkdir -p build/${{ matrix.platform }}-${{ matrix.variant }}
@@ -186,6 +188,7 @@ jobs:
           path: ${{ steps.archive.outputs.name }}.zip
 
       - name: Set SKIA_BRANCH output
+        shell: bash
         run: echo "skia_branch=${{ env.SKIA_BRANCH }}" >> $GITHUB_OUTPUT
 
   create-release:
