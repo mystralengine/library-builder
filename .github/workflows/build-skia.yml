@@ -26,11 +26,11 @@ jobs:
             platform: mac
             variant: gpu
             arch: "universal"
-          # Phase 2: Windows x64 GPU (uncomment when macOS works)
-          # - os: windows-latest
-          #   platform: win
-          #   variant: gpu
-          #   arch: x64
+          # Phase 2: Windows x64 GPU
+          - os: windows-latest
+            platform: win
+            variant: gpu
+            arch: x64
           # Phase 3: Linux x64 GPU (uncomment when Windows works)
           # - os: ubuntu-24.04
           #   platform: linux
@@ -210,8 +210,8 @@ jobs:
           prerelease: ${{ inputs.test_mode }}
           files: |
             ./skia-build-mac-universal-gpu/skia-build-mac-universal-gpu.zip
+            ./skia-build-win-x64-gpu/skia-build-win-x64-gpu.zip
             # Add more as platforms are enabled:
-            # ./skia-build-win-x64-gpu/skia-build-win-x64-gpu.zip
             # ./skia-build-linux-x64-gpu/skia-build-linux-x64-gpu.zip
             # ./skia-build-wasm-gpu/skia-build-wasm-gpu.zip
         env:
