@@ -130,6 +130,21 @@ jobs:
           # Add LLVM to PATH
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Pre-install GN for Windows ARM64
+        if: matrix.os == 'windows-11-arm'
+        shell: pwsh
+        run: |
+          # Download x64 GN binary (works under emulation on ARM64)
+          $gnUrl = "https://chrome-infra-packages.appspot.com/dl/gn/gn/windows-amd64/+/latest"
+          $gnZip = "$env:TEMP\gn.zip"
+          $gnDir = "$env:GITHUB_WORKSPACE\build\src\skia\bin"
+          New-Item -ItemType Directory -Force -Path $gnDir | Out-Null
+          Write-Host "Downloading GN..."
+          Invoke-WebRequest -Uri $gnUrl -OutFile $gnZip
+          Write-Host "Extracting GN..."
+          Expand-Archive -Path $gnZip -DestinationPath $gnDir -Force
+          Write-Host "GN installed to $gnDir"
+
       - name: Cache depot_tools and Skia source
         uses: actions/cache@v4
         with:
