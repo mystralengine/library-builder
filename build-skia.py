@@ -392,6 +392,7 @@ class SkiaBuildScript:
         self.variant = args.variant
         self.shallow_clone = args.shallow
         self.create_zip_all = args.zip_all
+        self.variant = args.variant
         self.validate_archs()
 
     def get_default_archs(self):
@@ -410,7 +411,7 @@ class SkiaBuildScript:
         valid_archs = {
             "mac": ["x86_64", "arm64", "universal"],
             "ios": ["x86_64", "arm64"],
-            "win": ["x64", "Win32"],
+            "win": ["x64", "arm64", "Win32"],
             "linux": ["x64", "arm64"],
             "wasm": ["wasm32"]
         }
@@ -466,7 +467,15 @@ class SkiaBuildScript:
             gn_args += f"target_cpu = \"{'arm64' if arch == 'arm64' else 'x64'}\""
         elif self.platform == "win":
             gn_args += f"extra_cflags = [\"{'/MTd' if self.config == 'Debug' else '/MT'}\"]\n"
-            gn_args += f"target_cpu = \"{'x86' if arch == 'Win32' else 'x64'}\"\n"
+            # Map architecture names to GN target_cpu values
+            if arch == "Win32":
+                gn_args += "target_cpu = \"x86\"\n"
+            elif arch == "arm64":
+                gn_args += "target_cpu = \"arm64\"\n"
+                # OpenGL is not supported on Windows ARM64, Dawn/Graphite will be used
+                gn_args += "skia_use_gl = false\n"
+            else:  # x64
+                gn_args += "target_cpu = \"x64\"\n"
             gn_args += "clang_win = \"C:\\Program Files\\LLVM\"\n"
         elif self.platform == "linux":
             gn_args += f"target_cpu = \"{'arm64' if arch == 'arm64' else 'x64'}\"\n"
