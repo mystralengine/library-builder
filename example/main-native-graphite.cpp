@@ -285,8 +285,16 @@ bool initDawn() {
     // Set up Dawn proc table
     dawnProcSetProcs(&dawn::native::GetProcs());
 
-    // Create Dawn instance
+    // Create Dawn instance with TimedWaitAny feature for proper synchronization
     wgpu::InstanceDescriptor instanceDesc = {};
+
+    // Enable TimedWaitAny feature (needed for some synchronization operations)
+    static const wgpu::InstanceFeatureName requiredFeatures[] = {
+        wgpu::InstanceFeatureName::TimedWaitAny
+    };
+    instanceDesc.requiredFeatureCount = 1;
+    instanceDesc.requiredFeatures = requiredFeatures;
+
     g_dawnInstance = std::make_unique<dawn::native::Instance>(&instanceDesc);
     g_instance = wgpu::Instance(g_dawnInstance->Get());
 
