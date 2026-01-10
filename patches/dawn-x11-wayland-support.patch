@@ -28,7 +28,7 @@ index b2c2e70..9f9d50a 100644
    dawn_enable_metal = is_mac || is_ios
    dawn_enable_vulkan = is_linux || is_android
 +  dawn_use_x11 = is_linux
-+  dawn_use_wayland = false
++  dawn_use_wayland = is_linux
  }
 diff --git a/third_party/dawn/build_dawn.py b/third_party/dawn/build_dawn.py
 index e23889e..574de99 100644
