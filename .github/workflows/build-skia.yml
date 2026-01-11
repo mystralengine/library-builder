@@ -9,14 +9,25 @@ on:
         required: false
         type: string
         default: 'chrome/m144'
+      platforms:
+        description: 'Platforms to build (comma-separated, or "all")'
+        required: false
+        type: string
+        default: 'all'
       test_mode:
         description: 'Run in test mode (skip Skia build)'
+        required: false
+        type: boolean
+        default: false
+      skip_release:
+        description: 'Skip creating release (useful for testing single platforms)'
         required: false
         type: boolean
         default: false
 
 jobs:
   build-skia:
+    if: ${{ inputs.platforms == 'all' || contains(inputs.platforms, matrix.platform) }}
     strategy:
       fail-fast: false
       matrix:
@@ -216,6 +227,7 @@ jobs:
         run: echo "skia_branch=${{ env.SKIA_BRANCH }}" >> $GITHUB_OUTPUT
 
   create-release:
+    if: ${{ !inputs.skip_release && inputs.platforms == 'all' }}
     needs: build-skia
     runs-on: ubuntu-latest
     steps:
