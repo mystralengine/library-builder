@@ -37,6 +37,10 @@ jobs:
             platform: ios
             variant: gpu
             arch: ""
+          - os: macos-latest
+            platform: visionos
+            variant: gpu
+            arch: "arm64"
           - os: windows-latest
             platform: win
             variant: gpu
@@ -232,6 +236,7 @@ jobs:
             ./skia-build-mac-arm64-gpu-release/skia-build-mac-arm64-gpu-release.zip
             ./skia-build-mac-x86_64-gpu-release/skia-build-mac-x86_64-gpu-release.zip
             ./skia-build-ios-gpu-release/skia-build-ios-gpu-release.zip
+            ./skia-build-visionos-arm64-gpu-release/skia-build-visionos-arm64-gpu-release.zip
             ./skia-build-win-x64-gpu-release/skia-build-win-x64-gpu-release.zip
             ./skia-build-win-x64-gpu-debug/skia-build-win-x64-gpu-debug.zip
             ./skia-build-linux-x64-gpu-release/skia-build-linux-x64-gpu-release.zip

@@ -4,7 +4,7 @@
 build-skia.py
 
 This script automates the process of building Skia libraries for various platforms
-(macOS, iOS, Windows, and Linux). It handles the setup of the build environment, cloning
+(macOS, iOS, visionOS, Windows, Linux, and WebAssembly). It handles the setup of the build environment, cloning
 of the Skia repository, configuration of build parameters, and compilation of the
 libraries. The script also includes functionality for creating universal binaries
 for macOS and a Swift Package and XCFramework for iOS.
@@ -77,6 +77,7 @@ LINUX_LIB_DIR = BASE_DIR / "linux" / "lib"
 # Platform-specific constants
 MAC_MIN_VERSION = "10.15"
 IOS_MIN_VERSION = "13.0"
+VISIONOS_MIN_VERSION = "1.0"
 
 # Unicode backend configuration
 USE_LIBGRAPHEME = False  # Set to True to use libgrapheme instead of ICU
@@ -89,6 +90,11 @@ LIBS = {
         "libskunicode_libgrapheme.a" if USE_LIBGRAPHEME else "libskunicode_icu.a"
     ],
     "ios": [
+        "libskia.a", "libskottie.a", "libsksg.a", "libskshaper.a",
+        "libskparagraph.a", "libsvg.a", "libskunicode_core.a",
+        "libskunicode_libgrapheme.a" if USE_LIBGRAPHEME else "libskunicode_icu.a"
+    ],
+    "visionos": [
         "libskia.a", "libskottie.a", "libsksg.a", "libskshaper.a",
         "libskparagraph.a", "libsvg.a", "libskunicode_core.a",
         "libskunicode_libgrapheme.a" if USE_LIBGRAPHEME else "libskunicode_icu.a"
@@ -114,6 +120,7 @@ LIBS = {
 GPU_LIBS = {
     "mac": ["libdawn_combined.a"],
     "ios": [],  # iOS uses Metal directly
+    "visionos": [],  # visionOS uses Metal directly
     "win": ["dawn_combined.lib"],
     "wasm": [],  # WASM uses browser WebGPU
     "linux": ["libdawn_combined.a"],
@@ -196,6 +203,17 @@ PLATFORM_GN_ARGS = {
     skia_ios_use_signing = false
     extra_cflags = [
         "-miphoneos-version-min={IOS_MIN_VERSION}",
+        "-I../../../src/skia/third_party/externals/expat/lib"
+    ]
+    extra_cflags_c = ["-Wno-error"]
+    """,
+
+    "visionos": f"""
+    skia_use_metal = true
+    target_os = "xros"
+    skia_ios_use_signing = false
+    extra_cflags = [
+        "-target", "arm64-apple-xros{VISIONOS_MIN_VERSION}",
         "-I../../../src/skia/third_party/externals/expat/lib"
     ]
     extra_cflags_c = ["-Wno-error"]
@@ -289,6 +307,17 @@ PLATFORM_GN_ARGS_CPU = {
     extra_cflags_c = ["-Wno-error"]
     """,
 
+    "visionos": f"""
+    skia_use_metal = false
+    target_os = "xros"
+    skia_ios_use_signing = false
+    extra_cflags = [
+        "-target", "arm64-apple-xros{VISIONOS_MIN_VERSION}",
+        "-I../../../src/skia/third_party/externals/expat/lib"
+    ]
+    extra_cflags_c = ["-Wno-error"]
+    """,
+
     "win": """
     skia_use_dawn = false
     skia_use_direct3d = false
@@ -360,8 +389,8 @@ class SkiaBuildScript:
         self.variant = "gpu"
 
     def parse_arguments(self):
-        parser = argparse.ArgumentParser(description="Build Skia for macOS, iOS, Windows, Linux and WebAssembly")
-        parser.add_argument("platform", choices=["mac", "ios", "win", "linux", "wasm", "xcframework"],
+        parser = argparse.ArgumentParser(description="Build Skia for macOS, iOS, visionOS, Windows, Linux and WebAssembly")
+        parser.add_argument("platform", choices=["mac", "ios", "visionos", "win", "linux", "wasm", "xcframework"],
                            help="Target platform or xcframework")
         parser.add_argument("-config", choices=["Debug", "Release"], default="Release", help="Build configuration")
         parser.add_argument("-archs", help="Target architectures (comma-separated)")
@@ -398,6 +427,8 @@ class SkiaBuildScript:
             return ["universal"]
         elif self.platform == "ios":
             return ["x86_64", "arm64"]
+        elif self.platform == "visionos":
+            return ["arm64"]  # visionOS is ARM-only (device and simulator)
         elif self.platform == "win":
             return ["x64"]
         elif self.platform == "linux":
@@ -409,6 +440,7 @@ class SkiaBuildScript:
         valid_archs = {
             "mac": ["x86_64", "arm64", "universal"],
             "ios": ["x86_64", "arm64"],
+            "visionos": ["arm64"],
             "win": ["x64", "arm64", "Win32"],
             "linux": ["x64", "arm64"],
             "wasm": ["wasm32"]
@@ -425,6 +457,8 @@ class SkiaBuildScript:
             return BASE_DIR / f"mac{variant_suffix}" / "lib"
         elif platform == "ios":
             return BASE_DIR / f"ios{variant_suffix}" / "lib"
+        elif platform == "visionos":
+            return BASE_DIR / f"visionos{variant_suffix}" / "lib"
         elif platform == "wasm":
             return BASE_DIR / f"wasm{variant_suffix}" / "lib"
         elif platform == "linux":
@@ -465,6 +499,8 @@ class SkiaBuildScript:
             gn_args += f"target_cpu = \"{arch}\""
         elif self.platform == "ios":
             gn_args += f"target_cpu = \"{'arm64' if arch == 'arm64' else 'x64'}\""
+        elif self.platform == "visionos":
+            gn_args += "target_cpu = \"arm64\""
         elif self.platform == "win":
             gn_args += f"extra_cflags = [\"{'/MTd' if self.config == 'Debug' else '/MT'}\"]\n"
             # Map architecture names to GN target_cpu values
@@ -516,6 +552,8 @@ class SkiaBuildScript:
         if self.platform == "mac":
             dest_dir = lib_dir / self.config / (arch if arch != "universal" else "")
         elif self.platform == "ios":
+            dest_dir = lib_dir / self.config / arch
+        elif self.platform == "visionos":
             dest_dir = lib_dir / self.config / arch
         elif self.platform == "wasm":
             dest_dir = lib_dir / self.config
@@ -1020,7 +1058,7 @@ class SkiaBuildScript:
                             zipf.write(file_path, arcname)
 
                 # Add all platform lib directories for current variant
-                for platform in ["mac", "ios", "win", "linux", "wasm"]:
+                for platform in ["mac", "ios", "visionos", "win", "linux", "wasm"]:
                     lib_dir = self.get_lib_dir(platform)
                     if lib_dir.exists():
                         for root, _, files in os.walk(lib_dir):
