@@ -687,6 +687,14 @@ class SkiaBuildScript:
             headers_path = BASE_DIR / "include"
             xcframework_command.extend(["-headers", str(headers_path)])
 
+        # Add visionOS library (arm64 only)
+        visionos_lib_dir = self.get_lib_dir("visionos")
+        visionos_lib_path = visionos_lib_dir / "Release" / "arm64" / "libSkia.a"
+        if visionos_lib_path.exists():
+            xcframework_command.extend(["-library", str(visionos_lib_path)])
+            if with_headers:
+                xcframework_command.extend(["-headers", str(headers_path)])
+
         # Specify output
         xcframework_command.extend(["-output", str(xcframework_path)])
 
