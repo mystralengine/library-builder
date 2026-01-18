@@ -324,12 +324,18 @@ jobs:
 
       - name: Create XCFramework
         run: |
+          # Merge iOS simulator architectures into a single fat library
+          mkdir -p build/ios-gpu/lib/Release/simulator
+          lipo -create \
+            build/ios-gpu/lib/Release/simulator-arm64/libSkia.a \
+            build/ios-gpu/lib/Release/simulator-x86_64/libSkia.a \
+            -output build/ios-gpu/lib/Release/simulator/libSkia.a
+
           xcodebuild -create-xcframework \
             -library build/mac-gpu/lib/Release/libSkia.a \
             -headers build/include \
             -library build/ios-gpu/lib/Release/device-arm64/libSkia.a \
-            -library build/ios-gpu/lib/Release/simulator-arm64/libSkia.a \
-            -library build/ios-gpu/lib/Release/simulator-x86_64/libSkia.a \
+            -library build/ios-gpu/lib/Release/simulator/libSkia.a \
             -library build/visionos-gpu/lib/Release/device-arm64/libSkia.a \
             -library build/visionos-gpu/lib/Release/simulator-arm64/libSkia.a \
             -output Skia.xcframework
