@@ -76,7 +76,7 @@ LINUX_LIB_DIR = BASE_DIR / "linux" / "lib"
 
 # Platform-specific constants
 MAC_MIN_VERSION = "10.15"
-IOS_MIN_VERSION = "13.0"
+IOS_MIN_VERSION = "14.0"  # Dawn requires iOS 14.0+ for C++ atomic wait/notify
 VISIONOS_MIN_VERSION = "1.0"
 
 # Unicode backend configuration
@@ -119,8 +119,8 @@ LIBS = {
 # Additional libraries for GPU variant (Dawn)
 GPU_LIBS = {
     "mac": ["libdawn_combined.a"],
-    "ios": [],  # iOS uses Metal directly
-    "visionos": [],  # visionOS uses Metal directly
+    "ios": ["libdawn_combined.a"],  # Dawn for WebGPU support
+    "visionos": ["libdawn_combined.a"],  # Dawn for WebGPU support
     "win": ["dawn_combined.lib"],
     "wasm": [],  # WASM uses browser WebGPU
     "linux": ["libdawn_combined.a"],
@@ -199,6 +199,7 @@ PLATFORM_GN_ARGS = {
 
     "ios": f"""
     skia_use_metal = true
+    skia_use_dawn = true
     target_os = "ios"
     skia_ios_use_signing = false
     extra_cflags_c = ["-Wno-error"]
@@ -210,6 +211,7 @@ PLATFORM_GN_ARGS = {
     # See: https://github.com/Shopify/react-native-skia/issues/2280
     "visionos": f"""
     skia_use_metal = true
+    skia_use_dawn = true
     target_os = "ios"
     skia_ios_use_signing = false
     extra_cflags_c = ["-Wno-error"]
@@ -850,6 +852,59 @@ class SkiaBuildScript:
             dest_webgpu_dir = dest_dir / "webgpu"
             dest_webgpu_dir.mkdir(parents=True, exist_ok=True)
             for file in gen_webgpu_dir.glob("*.h"):
+                shutil.copy2(file, dest_webgpu_dir / file.name)
+                colored_print(f"  Copied webgpu/{file.name}", Colors.OKCYAN)
+
+    def copy_dawn_headers_from_macos(self, dest_dir):
+        """Copy Dawn headers from existing macOS build for iOS/visionOS.
+
+        iOS and visionOS use Metal directly and don't build Dawn, but we still need
+        the WebGPU headers for the Graphite API. These headers are platform-agnostic,
+        so we copy them from a macOS build.
+        """
+        # Try multiple possible locations for macOS Dawn headers
+        home_dir = Path.home()
+        possible_sources = [
+            # Already packaged macOS build
+            BASE_DIR / "include" / "dawn",
+            # Previous macOS build in this build directory
+            BASE_DIR / "mac-gpu" / "lib" / "Release" / ".." / ".." / ".." / "include" / "dawn",
+            # macOS build output
+            TMP_DIR / f"mac_{self.config}_arm64_gpu" / "gen" / "third_party" / "dawn" / "include" / "dawn",
+            TMP_DIR / f"mac_{self.config}_x86_64_gpu" / "gen" / "third_party" / "dawn" / "include" / "dawn",
+            # MGFX fetchcontent cache (common location for downloaded Skia)
+            home_dir / "Dev" / "fetchcontent-cache" / "skia_prebuilt-src" / "include" / "dawn",
+        ]
+
+        source_dir = None
+        for path in possible_sources:
+            if path.exists() and (path / "webgpu.h").exists():
+                source_dir = path
+                break
+
+        if source_dir is None:
+            colored_print(
+                "Warning: Cannot find macOS Dawn headers to copy for iOS/visionOS.\n"
+                "  Please build macOS first: python build-skia.py mac -variant gpu",
+                Colors.WARNING
+            )
+            return
+
+        colored_print(f"Copying Dawn headers from macOS build: {source_dir}", Colors.OKBLUE)
+
+        # Copy dawn/*.h
+        dest_dawn_dir = dest_dir / "dawn"
+        dest_dawn_dir.mkdir(parents=True, exist_ok=True)
+        for file in source_dir.glob("*.h"):
+            shutil.copy2(file, dest_dawn_dir / file.name)
+            colored_print(f"  Copied dawn/{file.name}", Colors.OKCYAN)
+
+        # Copy webgpu/*.h if exists in sibling directory
+        source_webgpu_dir = source_dir.parent / "webgpu"
+        if source_webgpu_dir.exists():
+            dest_webgpu_dir = dest_dir / "webgpu"
+            dest_webgpu_dir.mkdir(parents=True, exist_ok=True)
+            for file in source_webgpu_dir.glob("*.h"):
                 shutil.copy2(file, dest_webgpu_dir / file.name)
                 colored_print(f"  Copied webgpu/{file.name}", Colors.OKCYAN)
 
