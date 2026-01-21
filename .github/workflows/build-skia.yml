@@ -128,7 +128,7 @@ jobs:
           #   platform: android
           #   variant: gpu
           #   arch: x64
-            config: Release
+          #   config: Release
 
     runs-on: ${{ matrix.os }}
     env:
