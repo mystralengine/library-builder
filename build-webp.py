@@ -215,26 +215,26 @@ class WebPBuildScript:
                 colored_print("Error: Android NDK path required. Use -ndk or set ANDROID_NDK_HOME", Colors.FAIL)
                 sys.exit(1)
             arch_map = {"arm64": "arm64-v8a", "arm": "armeabi-v7a", "x64": "x86_64", "x86": "x86"}
-            args.extend([
-                "-DCMAKE_SYSTEM_NAME=Android",
-                f"-DCMAKE_ANDROID_NDK={self.ndk_path}",
-                f"-DCMAKE_ANDROID_ARCH_ABI={arch_map.get(arch, arch)}",
-                f"-DCMAKE_ANDROID_API={ANDROID_MIN_API}",
-                "-DCMAKE_ANDROID_STL_TYPE=c++_static",
-            ])
-        elif self.platform == "win":
-            crt_flag = "/MD" if self.crt == "dynamic" else "/MT"
-            if self.config == "Debug":
-                crt_flag += "d"
+            toolchain_file = Path(self.ndk_path) / "build" / "cmake" / "android.toolchain.cmake"
             args.extend([
                 "-G", "Ninja",
-                f"-DCMAKE_C_FLAGS_RELEASE={crt_flag}",
-                f"-DCMAKE_CXX_FLAGS_RELEASE={crt_flag}",
-                f"-DCMAKE_C_FLAGS_DEBUG={crt_flag}",
-                f"-DCMAKE_CXX_FLAGS_DEBUG={crt_flag}",
-                "-DCMAKE_MSVC_RUNTIME_LIBRARY=" +
-                    ("MultiThreadedDLL" if self.crt == "dynamic" else "MultiThreaded") +
-                    ("Debug" if self.config == "Debug" else ""),
+                f"-DCMAKE_TOOLCHAIN_FILE={toolchain_file}",
+                f"-DANDROID_ABI={arch_map.get(arch, arch)}",
+                f"-DANDROID_PLATFORM=android-{ANDROID_MIN_API}",
+                "-DANDROID_STL=c++_static",
+            ])
+        elif self.platform == "win":
+            # Use Visual Studio generator for proper MSVC support
+            # CMAKE_MSVC_RUNTIME_LIBRARY handles /MT vs /MD
+            runtime_lib = "MultiThreaded"
+            if self.crt == "dynamic":
+                runtime_lib += "DLL"
+            if self.config == "Debug":
+                runtime_lib += "Debug"
+            args.extend([
+                "-G", "Visual Studio 17 2022",
+                "-A", "x64" if arch == "x64" else "ARM64",
+                f"-DCMAKE_MSVC_RUNTIME_LIBRARY={runtime_lib}",
             ])
         elif self.platform == "linux":
             args.extend([

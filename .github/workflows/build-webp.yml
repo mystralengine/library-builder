@@ -148,12 +148,7 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Install LLVM and Clang (Windows)
-        if: steps.check.outputs.should_build == 'true' && runner.os == 'Windows'
-        uses: KyleMayes/install-llvm-action@v2
-        with:
-          version: "19.1.0"
-          env: true
+      # Windows uses Visual Studio generator, no need for LLVM
 
       - name: Cache libwebp source
         if: steps.check.outputs.should_build == 'true'

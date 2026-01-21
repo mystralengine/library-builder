@@ -312,6 +312,8 @@ PLATFORM_GN_ARGS = {
     skia_use_freetype = true
     skia_use_system_freetype2 = false
     skia_use_fontconfig = false
+    skia_use_libwebp_decode = false
+    skia_use_libwebp_encode = false
     ndk_api = {ANDROID_MIN_API}
     extra_cflags_c = ["-Wno-error"]
     """
