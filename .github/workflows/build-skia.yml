@@ -1,14 +1,16 @@
 name: Build Skia
-run-name: Build Skia
+run-name: Build Skia ${{ inputs.skia_branch || 'main' }}
 on:
-  # push:
+  schedule:
+    # Run weekly on Monday at 9:00 AM UTC (Sunday 1:00 AM PST)
+    - cron: '0 9 * * 1'
   workflow_dispatch:
     inputs:
       skia_branch:
-        description: 'Skia branch to build (e.g., chrome/m144)'
+        description: 'Skia branch to build (e.g., main, chrome/m144)'
         required: false
         type: string
-        default: 'chrome/m144'
+        default: 'main'
       platforms:
         description: 'Platforms to build (comma-separated, or "all")'
         required: false
@@ -29,12 +31,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build-skia:
     strategy:
       fail-fast: false
       matrix:
         include:
+          # macOS builds
           - os: macos-latest
             platform: mac
             variant: gpu
@@ -47,6 +53,7 @@ jobs:
             platform: mac
             variant: gpu
             arch: "x86_64"
+          # iOS builds
           - os: macos-latest
             platform: ios
             variant: gpu
@@ -57,6 +64,7 @@ jobs:
             variant: gpu
             arch: "arm64,x86_64"
             target: "simulator"
+          # visionOS builds
           - os: macos-latest
             platform: visionos
             variant: gpu
@@ -67,59 +75,63 @@ jobs:
             variant: gpu
             arch: "arm64"
             target: "simulator"
+          # Windows builds - Static CRT (/MT)
           - os: windows-latest
             platform: win
             variant: gpu
             arch: x64
             config: Release
+            crt: static
           - os: windows-latest
             platform: win
             variant: gpu
             arch: x64
             config: Debug
+            crt: static
+          # Windows builds - Dynamic CRT (/MD)
+          - os: windows-latest
+            platform: win
+            variant: gpu
+            arch: x64
+            config: Release
+            crt: dynamic
+          - os: windows-latest
+            platform: win
+            variant: gpu
+            arch: x64
+            config: Debug
+            crt: dynamic
+          # Linux builds
           - os: ubuntu-latest
             platform: linux
             variant: gpu
             arch: x64
+          # WASM builds
           - os: ubuntu-latest
             platform: wasm
             variant: gpu
             arch: "wasm32"
             config: Release
+          # Android builds
+          - os: ubuntu-latest
+            platform: android
+            variant: gpu
+            arch: arm64
+            config: Release
+          - os: ubuntu-latest
+            platform: android
+            variant: gpu
+            arch: arm
+            config: Release
+          - os: ubuntu-latest
+            platform: android
+            variant: gpu
+            arch: x64
+            config: Release
 
-          # ARM64 platforms (later)
-          # - os: ubuntu-24.04-arm
-          #   platform: linux
-          #   variant: gpu
-          #   arch: arm64
-          # - os: windows-11-arm
-          #   platform: win
-          #   variant: gpu
-          #   arch: arm64
-          # CPU variants
-          # - os: macos-latest
-          #   platform: mac
-          #   variant: cpu
-          #   arch: ""
-          # - os: windows-latest
-          #   platform: win
-          #   variant: cpu
-          #   arch: x64
-          # - os: ubuntu-24.04
-          #   platform: linux
-          #   variant: cpu
-          #   arch: x64
-          # - os: ubuntu-latest
-          #   platform: wasm
-          #   variant: cpu
-          #   arch: ""
-          # - os: macos-latest
-          #   platform: ios
-          #   variant: cpu
-          #   arch: ""
     runs-on: ${{ matrix.os }}
     env:
-      SKIA_BRANCH: ${{ inputs.skia_branch || 'chrome/m144' }}
+      SKIA_BRANCH: ${{ inputs.skia_branch || 'main' }}
     outputs:
       skia_branch: ${{ env.SKIA_BRANCH }}
     steps:
@@ -150,6 +162,18 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libfontconfig1-dev libgl1-mesa-dev libglu1-mesa-dev libx11-xcb-dev libxcb1-dev libxcb-xkb-dev libwayland-dev ninja-build
+
+      - name: Set up Android NDK
+        if: steps.check.outputs.should_build == 'true' && matrix.platform == 'android'
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'ndk;26.1.10909125'
+
+      - name: Set Android NDK environment
+        if: steps.check.outputs.should_build == 'true' && matrix.platform == 'android'
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/26.1.10909125" >> $GITHUB_ENV
 
       - name: Set up Ninja
         if: steps.check.outputs.should_build == 'true' && matrix.os != 'ubuntu-24.04-arm'
@@ -193,7 +217,9 @@ jobs:
         run: |
           # Replace commas with dashes for cache key (commas not allowed)
           ARCH_SAFE=$(echo "${{ matrix.arch || 'default' }}" | tr ',' '-')
+          CRT_SUFFIX="${{ matrix.crt || '' }}"
           echo "arch=${ARCH_SAFE}" >> $GITHUB_OUTPUT
+          echo "crt=${CRT_SUFFIX}" >> $GITHUB_OUTPUT
 
       - name: Cache depot_tools and Skia source
         if: steps.check.outputs.should_build == 'true'
@@ -202,12 +228,7 @@ jobs:
           path: |
             build/tmp/depot_tools
             build/src/skia
-          key: ${{ runner.os }}-${{ steps.cache-key.outputs.arch }}-depot_tools-skia-${{ env.SKIA_BRANCH }}-${{ hashFiles('build-skia.py') }}
-
-      # - name: Build Skia (Debug)
-      #   if: ${{ !inputs.test_mode }}
-      #   run: |
-      #     python3 build-skia.py ${{ matrix.platform }} -config Debug --shallow -branch ${{ env.SKIA_BRANCH }}
+          key: ${{ runner.os }}-${{ steps.cache-key.outputs.arch }}-${{ steps.cache-key.outputs.crt }}-depot_tools-skia-${{ env.SKIA_BRANCH }}-${{ hashFiles('build-skia.py') }}
 
       - name: Build Skia (${{ matrix.config || 'Release' }})
         if: steps.check.outputs.should_build == 'true' && !inputs.test_mode
@@ -221,8 +242,12 @@ jobs:
           if [ -n "${{ matrix.target }}" ]; then
             TARGET_ARG="-target ${{ matrix.target }}"
           fi
+          CRT_ARG=""
+          if [ -n "${{ matrix.crt }}" ]; then
+            CRT_ARG="-crt ${{ matrix.crt }}"
+          fi
           CONFIG="${{ matrix.config || 'Release' }}"
-          python3 build-skia.py ${{ matrix.platform }} -variant ${{ matrix.variant }} -config $CONFIG --shallow -branch ${{ env.SKIA_BRANCH }} $ARCH_ARG $TARGET_ARG
+          python3 build-skia.py ${{ matrix.platform }} -variant ${{ matrix.variant }} -config $CONFIG --shallow -branch ${{ env.SKIA_BRANCH }} $ARCH_ARG $TARGET_ARG $CRT_ARG
 
       - name: Set archive name
         if: steps.check.outputs.should_build == 'true'
@@ -242,6 +267,10 @@ jobs:
             # Replace commas with dashes for multi-arch builds
             ARCH_SAFE=$(echo "${{ matrix.arch }}" | tr ',' '-')
             NAME="${NAME}-${ARCH_SAFE}"
+          fi
+          # Add CRT type for Windows
+          if [ -n "${{ matrix.crt }}" ]; then
+            NAME="${NAME}-${{ matrix.crt }}"
           fi
           NAME="${NAME}-${{ matrix.variant }}-${CONFIG_LOWER}"
           echo "name=${NAME}" >> $GITHUB_OUTPUT
@@ -266,9 +295,9 @@ jobs:
             SHARE_DIR="build/share"
           fi
           if [ "${{ runner.os }}" == "Windows" ]; then
-            7z a -tzip ${{ steps.archive.outputs.name }}.zip build/include $SHARE_DIR build/${{ matrix.platform }}-${{ matrix.variant }}
+            7z a -tzip ${{ steps.archive.outputs.name }}.zip build/include $SHARE_DIR build/${{ matrix.platform }}-${{ matrix.variant }}*
           else
-            zip -r ${{ steps.archive.outputs.name }}.zip build/include $SHARE_DIR build/${{ matrix.platform }}-${{ matrix.variant }}
+            zip -r ${{ steps.archive.outputs.name }}.zip build/include $SHARE_DIR build/${{ matrix.platform }}-${{ matrix.variant }}*
           fi
 
       - name: Upload artifact
@@ -285,7 +314,7 @@ jobs:
 
   create-xcframework:
     needs: build-skia
-    if: ${{ !inputs.skip_release && (inputs.platforms == 'all') }}
+    if: ${{ !inputs.skip_release && (inputs.platforms == 'all' || inputs.platforms == '') }}
     runs-on: macos-latest
     steps:
       - name: Download macOS artifact
@@ -350,20 +379,60 @@ jobs:
           path: Skia.xcframework.zip
 
   create-release:
-    if: ${{ !inputs.skip_release && inputs.platforms == 'all' }}
+    if: ${{ !inputs.skip_release && (inputs.platforms == 'all' || inputs.platforms == '') }}
     needs: [build-skia, create-xcframework]
     runs-on: ubuntu-latest
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
 
+      - name: Get release tag
+        id: tag
+        run: |
+          BRANCH="${{ needs.build-skia.outputs.skia_branch }}"
+          DATE=$(date +'%Y%m%d')
+          if [[ "$BRANCH" == "main" ]]; then
+            TAG="main-${DATE}"
+          else
+            TAG="${BRANCH}"
+          fi
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "Release tag: ${TAG}"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           body: |
-            https://raw.githubusercontent.com/google/skia/${{ needs.build-skia.outputs.skia_branch }}/RELEASE_NOTES.md
-          tag_name: ${{ needs.build-skia.outputs.skia_branch }}${{ inputs.test_mode && '-test' || '' }}
-          name: ${{ needs.build-skia.outputs.skia_branch }}${{ inputs.test_mode && ' (Test)' || '' }}
+            ## Skia Build - ${{ steps.tag.outputs.tag }}
+
+            Built from Skia branch: `${{ needs.build-skia.outputs.skia_branch }}`
+
+            ### Platforms
+
+            **Apple:**
+            - macOS (universal, arm64, x86_64)
+            - iOS (device arm64, simulator arm64+x86_64)
+            - visionOS (device arm64, simulator arm64)
+            - XCFramework (all Apple platforms combined)
+
+            **Windows x64:**
+            - Release/Debug with static CRT (/MT, /MTd)
+            - Release/Debug with dynamic CRT (/MD, /MDd)
+
+            **Linux x64:**
+            - Release build
+
+            **Android:**
+            - arm64, arm, x64 builds
+
+            **WebAssembly:**
+            - wasm32 build
+
+            ### Notes
+            - Windows `/MT` builds: Use with vcpkg `x64-windows-static` triplet
+            - Windows `/MD` builds: Use with Dawn or other dynamic CRT dependencies
+          tag_name: ${{ steps.tag.outputs.tag }}${{ inputs.test_mode && '-test' || '' }}
+          name: Skia ${{ steps.tag.outputs.tag }}${{ inputs.test_mode && ' (Test)' || '' }}
           draft: false
           prerelease: ${{ inputs.test_mode }}
           files: |
@@ -374,10 +443,15 @@ jobs:
             ./skia-build-ios-simulator-arm64-x86_64-gpu-release/skia-build-ios-simulator-arm64-x86_64-gpu-release.zip
             ./skia-build-visionos-device-arm64-gpu-release/skia-build-visionos-device-arm64-gpu-release.zip
             ./skia-build-visionos-simulator-arm64-gpu-release/skia-build-visionos-simulator-arm64-gpu-release.zip
-            ./skia-build-win-x64-gpu-release/skia-build-win-x64-gpu-release.zip
-            ./skia-build-win-x64-gpu-debug/skia-build-win-x64-gpu-debug.zip
+            ./skia-build-win-x64-static-gpu-release/skia-build-win-x64-static-gpu-release.zip
+            ./skia-build-win-x64-static-gpu-debug/skia-build-win-x64-static-gpu-debug.zip
+            ./skia-build-win-x64-dynamic-gpu-release/skia-build-win-x64-dynamic-gpu-release.zip
+            ./skia-build-win-x64-dynamic-gpu-debug/skia-build-win-x64-dynamic-gpu-debug.zip
             ./skia-build-linux-x64-gpu-release/skia-build-linux-x64-gpu-release.zip
             ./skia-build-wasm-wasm32-gpu-release/skia-build-wasm-wasm32-gpu-release.zip
+            ./skia-build-android-arm64-gpu-release/skia-build-android-arm64-gpu-release.zip
+            ./skia-build-android-arm-gpu-release/skia-build-android-arm-gpu-release.zip
+            ./skia-build-android-x64-gpu-release/skia-build-android-x64-gpu-release.zip
             ./Skia.xcframework/Skia.xcframework.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

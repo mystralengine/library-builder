@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository provides a Python script and GitHub Actions workflow for building Skia static libraries for multiple platforms (macOS, iOS, visionOS, Windows, Linux, WASM). It automates build environment setup, Skia repository cloning, GN argument configuration, and compilation.
+This repository (mystralengine/library-builder) provides Python scripts and GitHub Actions workflows for building static libraries for Mystral Engine dependencies. Currently supports Skia, with plans to add V8, ANGLE, and other libraries.
+
+The Skia build script supports multiple platforms (macOS, iOS, visionOS, Android, Windows, Linux, WASM) and automates build environment setup, repository cloning, GN argument configuration, and compilation.
+
+**Fork of:** [olilarkin/skia-builder](https://github.com/olilarkin/skia-builder)
 
 ## Build Commands
 
@@ -18,19 +22,27 @@ ulimit -n 2048
 python3 build-skia.py mac                          # macOS universal (arm64 + x86_64)
 python3 build-skia.py ios                          # iOS (arm64 + x86_64 simulator)
 python3 build-skia.py visionos                     # visionOS (arm64)
-python3 build-skia.py win                          # Windows x64
+python3 build-skia.py android                      # Android arm64
+python3 build-skia.py win                          # Windows x64 (static CRT)
 python3 build-skia.py linux                        # Linux x64
 python3 build-skia.py wasm                         # WebAssembly
 python3 build-skia.py xcframework                  # Apple XCFramework (macOS + iOS)
 
 # Options
-python3 build-skia.py <platform> -config Debug    # Debug build (default: Release)
-python3 build-skia.py <platform> -branch chrome/m130  # Specific Skia branch
-python3 build-skia.py <platform> --shallow        # Shallow clone
+python3 build-skia.py <platform> -config Debug     # Debug build (default: Release)
+python3 build-skia.py <platform> -branch main      # Specific Skia branch (default: main)
+python3 build-skia.py <platform> --shallow         # Shallow clone
 python3 build-skia.py <platform> -archs x86_64,arm64  # Specific architectures
 
-# Windows (use py -3 or the build-win.sh helper)
-py -3 build-skia.py win -config Release -branch chrome/m130
+# Windows CRT options
+python3 build-skia.py win -crt static              # Static CRT (/MT, /MTd) - default
+python3 build-skia.py win -crt dynamic             # Dynamic CRT (/MD, /MDd)
+
+# Android options
+python3 build-skia.py android -archs arm64         # ARM64 (default)
+python3 build-skia.py android -archs arm           # ARMv7
+python3 build-skia.py android -archs x64           # x86_64
+python3 build-skia.py android -ndk /path/to/ndk    # Custom NDK path
 ```
 
 **Makefile shortcuts (from macOS):**
@@ -59,42 +71,55 @@ build/
 ├── src/skia/          # Cloned Skia source
 ├── tmp/               # depot_tools, intermediate builds
 ├── include/           # Packaged headers
-├── mac/lib/           # macOS libraries
-├── ios/lib/           # iOS libraries (per-arch)
-├── visionos/lib/      # visionOS libraries (arm64)
-├── win/lib/           # Windows libraries
-├── linux/lib/         # Linux libraries
-├── wasm/lib/          # WASM libraries
+├── mac-gpu/lib/       # macOS libraries (GPU variant)
+├── ios-gpu/lib/       # iOS libraries (per-arch)
+├── visionos-gpu/lib/  # visionOS libraries (arm64)
+├── android-gpu/lib/   # Android libraries (per-arch)
+├── win-gpu/lib/       # Windows libraries (static CRT)
+├── win-gpu-md/lib/    # Windows libraries (dynamic CRT)
+├── linux-gpu/lib/     # Linux libraries
+├── wasm-gpu/lib/      # WASM libraries
 └── xcframework/       # XCFramework output
 ```
 
 **Key configuration:**
-- `USE_LIBGRAPHEME` constant (line 81) toggles between libgrapheme and ICU for Unicode
-- `MAC_MIN_VERSION` / `IOS_MIN_VERSION` set deployment targets
+- `USE_LIBGRAPHEME` constant toggles between libgrapheme and ICU for Unicode
+- `MAC_MIN_VERSION` / `IOS_MIN_VERSION` / `ANDROID_MIN_API` set deployment targets
 - `EXCLUDE_DEPS` lists Skia dependencies to skip during sync
 
-## visionOS Support
+## Platform-Specific Notes
 
-visionOS builds use a workaround because **GN (Google's build tool) doesn't recognize visionOS/xros as a valid target OS**. This causes assertion failures in Skia's GN files (e.g., `third_party/zlib/BUILD.gn`).
+### visionOS Support
+visionOS builds use a workaround because **GN doesn't recognize visionOS/xros as a valid target OS**.
 
 **Our approach:** Use `target_os = "ios"` with explicit visionOS SDK and compiler flags:
 - `-target arm64-apple-xros1.0` tells clang to use the visionOS target triple
-- `-isysroot <path>` explicitly points to the visionOS SDK (obtained via `xcrun --sdk xros --show-sdk-path`)
+- `-isysroot <path>` explicitly points to the visionOS SDK
 
-The explicit sysroot is critical because `target_os = "ios"` causes GN to use the iOS SDK, but the iOS SDK's libc++ marks many functions as unavailable for visionOS (e.g., `__libcpp_verbose_abort`, `pthread_mutexattr_init`).
+### Android Support
+Android builds require the NDK. Set via:
+- `-ndk /path/to/ndk` argument
+- `ANDROID_NDK_HOME` environment variable
+- `ANDROID_NDK_ROOT` environment variable
 
-This approach was informed by research into:
-- [react-native-skia #2280](https://github.com/Shopify/react-native-skia/issues/2280) - visionOS support blocked by GN limitations
-- [react-native-webgpu #90](https://github.com/wcandillon/react-native-webgpu/pull/90) - successfully supports visionOS using CMake instead of GN
+Supported architectures: `arm64`, `arm`, `x64`, `x86`
 
-**Alternative approach (not used):** Build with CMake instead of GN, like react-native-webgpu does for Dawn. This would require significant changes to the build script.
+### Windows CRT Options
+Windows builds support both static and dynamic CRT:
+- `-crt static` (default): `/MT` for Release, `/MTd` for Debug
+- `-crt dynamic`: `/MD` for Release, `/MDd` for Debug
+
+Use static CRT with vcpkg `x64-windows-static` triplet.
+Use dynamic CRT with Dawn or other dynamic CRT dependencies.
 
 ## CI
 
-The GitHub Actions workflow (`.github/workflows/build-skia.yml`) builds all platforms in parallel and creates releases tagged with the Skia branch name.
+The GitHub Actions workflow (`.github/workflows/build-skia.yml`) builds all platforms in parallel and creates releases.
+
+**Scheduled builds:** Weekly on Monday at 9:00 AM UTC (Sunday 1:00 AM PST)
 
 **Workflow inputs:**
-- `skia_branch` - Skia branch to build (default: `chrome/m144`)
+- `skia_branch` - Skia branch to build (default: `main`)
 - `platforms` - Platforms to build, comma-separated or `all` (default: `all`)
 - `skip_release` - Skip creating release, useful for testing (default: `false`)
 - `test_mode` - Skip actual build, create dummy files (default: `false`)
@@ -104,7 +129,7 @@ The GitHub Actions workflow (`.github/workflows/build-skia.yml`) builds all plat
 gh workflow run build-skia.yml
 
 # Build specific platform(s) without release
-gh workflow run build-skia.yml -f platforms=visionos -f skip_release=true
+gh workflow run build-skia.yml -f platforms=android -f skip_release=true
 gh workflow run build-skia.yml -f platforms=mac,ios -f skip_release=true
 
 # Build with different Skia branch
@@ -115,5 +140,17 @@ gh run list
 gh run view <run-id> --log-failed
 
 # Create XCFramework from existing release (without rebuilding)
-gh workflow run create-xcframework.yml -f release_tag=chrome/m144
+gh workflow run create-xcframework.yml -f release_tag=main-20260121
 ```
+
+## Build Matrix
+
+| Platform | Architectures | Variants | Notes |
+|----------|---------------|----------|-------|
+| macOS | universal, arm64, x86_64 | GPU | Dawn/Metal |
+| iOS | device-arm64, simulator-arm64+x86_64 | GPU | Dawn/Metal |
+| visionOS | device-arm64, simulator-arm64 | GPU | Dawn/Metal |
+| Android | arm64, arm, x64 | GPU | Dawn/Vulkan |
+| Windows | x64 | GPU + static CRT, GPU + dynamic CRT | Dawn/D3D |
+| Linux | x64 | GPU | Dawn/Vulkan |
+| WASM | wasm32 | GPU | WebGL/WebGPU |

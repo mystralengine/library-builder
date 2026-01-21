@@ -78,6 +78,7 @@ LINUX_LIB_DIR = BASE_DIR / "linux" / "lib"
 MAC_MIN_VERSION = "10.15"
 IOS_MIN_VERSION = "14.0"  # Dawn requires iOS 14.0+ for C++ atomic wait/notify
 VISIONOS_MIN_VERSION = "1.0"
+ANDROID_MIN_API = "24"  # Android 7.0 (Nougat) - minimum for Vulkan support
 
 # Unicode backend configuration
 USE_LIBGRAPHEME = False  # Set to True to use libgrapheme instead of ICU
@@ -113,6 +114,11 @@ LIBS = {
         "libskia.a", "libskottie.a", "libskshaper.a", "libsksg.a",
         "libskparagraph.a", "libsvg.a", "libskunicode_core.a",
         "libskunicode_libgrapheme.a" if USE_LIBGRAPHEME else "libskunicode_icu.a"
+    ],
+    "android": [
+        "libskia.a", "libskottie.a", "libskshaper.a", "libsksg.a",
+        "libskparagraph.a", "libsvg.a", "libskunicode_core.a",
+        "libskunicode_libgrapheme.a" if USE_LIBGRAPHEME else "libskunicode_icu.a"
     ]
 }
 
@@ -124,6 +130,7 @@ GPU_LIBS = {
     "win": ["dawn_combined.lib"],
     "wasm": [],  # WASM uses browser WebGPU
     "linux": ["libdawn_combined.a"],
+    "android": ["libdawn_combined.a"],  # Dawn for WebGPU support on Android
 }
 
 # Directories to package
@@ -275,6 +282,18 @@ PLATFORM_GN_ARGS = {
     skia_use_freetype = true
     skia_use_system_freetype2 = false
     extra_cflags_c = ["-Wno-error"]
+    """,
+
+    "android": f"""
+    target_os = "android"
+    skia_use_vulkan = true
+    skia_use_dawn = true
+    skia_use_gl = true
+    skia_use_freetype = true
+    skia_use_system_freetype2 = false
+    skia_use_fontconfig = false
+    ndk_api = {ANDROID_MIN_API}
+    extra_cflags_c = ["-Wno-error"]
     """
 }
 
@@ -372,6 +391,18 @@ PLATFORM_GN_ARGS_CPU = {
     skia_use_freetype = true
     skia_use_system_freetype2 = false
     extra_cflags_c = ["-Wno-error"]
+    """,
+
+    "android": f"""
+    target_os = "android"
+    skia_use_vulkan = false
+    skia_use_dawn = false
+    skia_use_gl = false
+    skia_use_freetype = true
+    skia_use_system_freetype2 = false
+    skia_use_fontconfig = false
+    ndk_api = {ANDROID_MIN_API}
+    extra_cflags_c = ["-Wno-error"]
     """
 }
 
@@ -384,10 +415,12 @@ class SkiaBuildScript:
         self.branch = None
         self.variant = "gpu"
         self.target = "all"  # device, simulator, or all
+        self.crt = "static"  # Windows CRT: static (/MT) or dynamic (/MD)
+        self.ndk_path = None  # Android NDK path
 
     def parse_arguments(self):
-        parser = argparse.ArgumentParser(description="Build Skia for macOS, iOS, visionOS, Windows, Linux and WebAssembly")
-        parser.add_argument("platform", choices=["mac", "ios", "visionos", "win", "linux", "wasm", "xcframework"],
+        parser = argparse.ArgumentParser(description="Build Skia for macOS, iOS, visionOS, Android, Windows, Linux and WebAssembly")
+        parser.add_argument("platform", choices=["mac", "ios", "visionos", "android", "win", "linux", "wasm", "xcframework"],
                            help="Target platform or xcframework")
         parser.add_argument("-config", choices=["Debug", "Release"], default="Release", help="Build configuration")
         parser.add_argument("-archs", help="Target architectures (comma-separated)")
@@ -396,8 +429,11 @@ class SkiaBuildScript:
                            help="Build variant: cpu (no GPU) or gpu (with Graphite/Dawn)")
         parser.add_argument("-target", choices=["device", "simulator", "all"], default="all",
                            help="Build target for iOS/visionOS: device, simulator, or all")
+        parser.add_argument("-crt", choices=["static", "dynamic"], default="static",
+                           help="Windows CRT linkage: static (/MT) or dynamic (/MD)")
+        parser.add_argument("-ndk", help="Path to Android NDK (or set ANDROID_NDK_HOME env var)")
         parser.add_argument("--shallow", action="store_true", help="Perform a shallow clone of the Skia repository")
-        parser.add_argument("--zip-all", action="store_true", 
+        parser.add_argument("--zip-all", action="store_true",
                            help="Create a zip archive containing all platform libraries")
         args = parser.parse_args()
 
@@ -417,6 +453,8 @@ class SkiaBuildScript:
         self.branch = args.branch
         self.variant = args.variant
         self.target = args.target
+        self.crt = args.crt
+        self.ndk_path = args.ndk or os.environ.get("ANDROID_NDK_HOME") or os.environ.get("ANDROID_NDK_ROOT")
         self.shallow_clone = args.shallow
         self.create_zip_all = args.zip_all
         self.validate_archs()
@@ -428,6 +466,8 @@ class SkiaBuildScript:
             return ["x86_64", "arm64"]
         elif self.platform == "visionos":
             return ["arm64"]  # visionOS is ARM-only (device and simulator)
+        elif self.platform == "android":
+            return ["arm64"]  # Default to arm64; can also do arm, x64, x86
         elif self.platform == "win":
             return ["x64"]
         elif self.platform == "linux":
@@ -440,6 +480,7 @@ class SkiaBuildScript:
             "mac": ["x86_64", "arm64", "universal"],
             "ios": ["x86_64", "arm64"],
             "visionos": ["arm64"],
+            "android": ["arm64", "arm", "x64", "x86"],
             "win": ["x64", "arm64", "Win32"],
             "linux": ["x64", "arm64"],
             "wasm": ["wasm32"]
@@ -452,18 +493,24 @@ class SkiaBuildScript:
     def get_lib_dir(self, platform):
         """Get the library directory for a platform, including variant suffix."""
         variant_suffix = f"-{self.variant}"
-        if platform == "mac":
+        # For Windows, also include CRT type in path
+        if platform == "win":
+            crt_suffix = "-md" if self.crt == "dynamic" else ""
+            return BASE_DIR / f"win{variant_suffix}{crt_suffix}" / "lib"
+        elif platform == "mac":
             return BASE_DIR / f"mac{variant_suffix}" / "lib"
         elif platform == "ios":
             return BASE_DIR / f"ios{variant_suffix}" / "lib"
         elif platform == "visionos":
             return BASE_DIR / f"visionos{variant_suffix}" / "lib"
+        elif platform == "android":
+            return BASE_DIR / f"android{variant_suffix}" / "lib"
         elif platform == "wasm":
             return BASE_DIR / f"wasm{variant_suffix}" / "lib"
         elif platform == "linux":
             return BASE_DIR / f"linux{variant_suffix}" / "lib"
-        else:  # Windows
-            return BASE_DIR / f"win{variant_suffix}" / "lib"
+        else:
+            return BASE_DIR / f"{platform}{variant_suffix}" / "lib"
 
     def setup_depot_tools(self):
         if not DEPOT_TOOLS_PATH.exists():
@@ -562,7 +609,12 @@ class SkiaBuildScript:
     ]
 '''
         elif self.platform == "win":
-            gn_args += f"extra_cflags = [\"{'/MTd' if self.config == 'Debug' else '/MT'}\"]\n"
+            # Determine CRT flag based on config and crt setting
+            if self.crt == "dynamic":
+                crt_flag = "/MDd" if self.config == "Debug" else "/MD"
+            else:
+                crt_flag = "/MTd" if self.config == "Debug" else "/MT"
+            gn_args += f"extra_cflags = [\"{crt_flag}\"]\n"
             # Map architecture names to GN target_cpu values
             if arch == "Win32":
                 gn_args += "target_cpu = \"x86\"\n"
@@ -588,6 +640,15 @@ class SkiaBuildScript:
                 gn_args += f"clang_win = \"{clang_win}\"\n"
             else:
                 colored_print("Warning: Clang/LLVM not found - build may fail", Colors.WARNING)
+        elif self.platform == "android":
+            # Map architecture names to GN target_cpu values
+            arch_map = {"arm64": "arm64", "arm": "arm", "x64": "x64", "x86": "x86"}
+            gn_args += f"target_cpu = \"{arch_map.get(arch, arch)}\"\n"
+            # Set NDK path if provided
+            if self.ndk_path:
+                gn_args += f"ndk = \"{self.ndk_path}\"\n"
+            else:
+                colored_print("Warning: Android NDK path not set. Set ANDROID_NDK_HOME or use -ndk flag.", Colors.WARNING)
         elif self.platform == "linux":
             gn_args += f"target_cpu = \"{'arm64' if arch == 'arm64' else 'x64'}\"\n"
         elif self.platform == "wasm":
