@@ -154,7 +154,12 @@ jobs:
       - name: Free disk space (Linux)
         if: steps.check.outputs.should_build == 'true' && runner.os == 'Linux'
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          # Don't remove Android SDK if building for Android
+          if [[ "${{ matrix.platform }}" == "android" ]]; then
+            sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          else
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          fi
           sudo docker image prune --all --force
 
       - name: Install Linux build dependencies
