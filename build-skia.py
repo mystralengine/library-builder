@@ -133,6 +133,18 @@ GPU_LIBS = {
     "android": ["libdawn_combined.a"],  # Dawn for WebGPU support on Android
 }
 
+# ANGLE libraries for WebGL/OpenGL ES compatibility (built as part of Skia)
+# ANGLE translates WebGL/GLES to native backends (Metal, D3D, Vulkan)
+ANGLE_LIBS = {
+    "mac": ["libEGL.a", "libGLESv2.a"],
+    "ios": ["libEGL.a", "libGLESv2.a"],
+    "visionos": ["libEGL.a", "libGLESv2.a"],
+    "android": ["libEGL.a", "libGLESv2.a"],
+    "win": ["libEGL.lib", "libGLESv2.lib"],
+    "linux": ["libEGL.a", "libGLESv2.a"],
+    # WASM: Use browser's WebGL implementation
+}
+
 # Directories to package
 PACKAGE_DIRS = [
     "include",
@@ -149,6 +161,8 @@ PACKAGE_DIRS = [
     "src/xml",
     # Dawn headers for Graphite WebGPU backend
     "third_party/externals/dawn/include",
+    # ANGLE headers for WebGL/OpenGL ES compatibility
+    "third_party/externals/angle2/include",
     # "third_party/externals/icu/source/common/unicode"
 ]
 
@@ -200,6 +214,7 @@ PLATFORM_GN_ARGS = {
     "mac": """
     skia_use_metal = true
     skia_use_dawn = true
+    skia_use_angle = true
     target_os = "mac"
     extra_cflags_c = ["-Wno-error"]
     """,
@@ -207,6 +222,7 @@ PLATFORM_GN_ARGS = {
     "ios": f"""
     skia_use_metal = true
     skia_use_dawn = true
+    skia_use_angle = true
     target_os = "ios"
     skia_ios_use_signing = false
     extra_cflags_c = ["-Wno-error"]
@@ -219,6 +235,7 @@ PLATFORM_GN_ARGS = {
     "visionos": f"""
     skia_use_metal = true
     skia_use_dawn = true
+    skia_use_angle = true
     target_os = "ios"
     skia_ios_use_signing = false
     extra_cflags_c = ["-Wno-error"]
@@ -227,6 +244,7 @@ PLATFORM_GN_ARGS = {
     "win": """
     skia_use_dawn = true
     skia_use_direct3d = true
+    skia_use_angle = true
     is_trivial_abi = false
     """,
 
@@ -277,6 +295,7 @@ PLATFORM_GN_ARGS = {
     "linux": """
     skia_use_vulkan = true
     skia_use_dawn = true
+    skia_use_angle = true
     skia_use_x11 = true
     skia_use_fontconfig = true
     skia_use_freetype = true
@@ -288,6 +307,7 @@ PLATFORM_GN_ARGS = {
     target_os = "android"
     skia_use_vulkan = true
     skia_use_dawn = true
+    skia_use_angle = true
     skia_use_gl = true
     skia_use_freetype = true
     skia_use_system_freetype2 = false
@@ -731,6 +751,17 @@ class SkiaBuildScript:
                 else:
                     colored_print(f"Warning: Dawn library {lib} not found", Colors.WARNING)
 
+        # Copy ANGLE libraries for WebGL/GLES compatibility (macOS, Windows, Linux only)
+        if self.variant == "gpu" and self.platform in ANGLE_LIBS:
+            for lib in ANGLE_LIBS[self.platform]:
+                src_file = src_dir / lib
+                dest_file = dest_dir / lib
+                if src_file.exists():
+                    shutil.copy2(str(src_file), str(dest_file))
+                    colored_print(f"Copied {lib} (ANGLE) to {dest_dir}", Colors.OKGREEN)
+                else:
+                    colored_print(f"Warning: ANGLE library {lib} not found", Colors.WARNING)
+
     # Lipo different architectures into a universal binary
     def create_universal_binary(self):
         colored_print('Creating universal files...', Colors.OKBLUE)
@@ -761,6 +792,22 @@ class SkiaBuildScript:
                     # Only one arch available, just copy it
                     shutil.copy2(input_libs[0], str(dest_dir / lib))
                     colored_print(f"Copied single-arch file: {lib} (Dawn)", Colors.WARNING)
+
+        # Combine ANGLE libraries for GPU variant
+        if self.variant == "gpu" and "mac" in ANGLE_LIBS:
+            for lib in ANGLE_LIBS["mac"]:
+                input_libs = []
+                for arch in ["x86_64", "arm64"]:
+                    lib_path = lib_dir / self.config / arch / lib
+                    if lib_path.exists():
+                        input_libs.append(str(lib_path))
+                if len(input_libs) == 2:
+                    output_lib = str(dest_dir / lib)
+                    subprocess.run(["lipo", "-create"] + input_libs + ["-output", output_lib], check=True)
+                    colored_print(f"Created universal file: {lib} (ANGLE)", Colors.OKGREEN)
+                elif len(input_libs) == 1:
+                    shutil.copy2(input_libs[0], str(dest_dir / lib))
+                    colored_print(f"Copied single-arch file: {lib} (ANGLE)", Colors.WARNING)
 
         # Remove architecture-specific folders
         shutil.rmtree(lib_dir / self.config / "x86_64", ignore_errors=True)
