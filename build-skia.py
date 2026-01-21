@@ -123,6 +123,7 @@ LIBS = {
 }
 
 # Additional libraries for GPU variant (Dawn)
+# Note: Android doesn't use Dawn due to NDK C++20 compatibility issues - uses native Vulkan directly
 GPU_LIBS = {
     "mac": ["libdawn_combined.a"],
     "ios": ["libdawn_combined.a"],  # Dawn for WebGPU support
@@ -130,7 +131,7 @@ GPU_LIBS = {
     "win": ["dawn_combined.lib"],
     "wasm": [],  # WASM uses browser WebGPU
     "linux": ["libdawn_combined.a"],
-    "android": ["libdawn_combined.a"],  # Dawn for WebGPU support on Android
+    "android": [],  # Android uses native Vulkan/GLES directly (Dawn disabled due to NDK C++20 issues)
 }
 
 # ANGLE libraries for WebGL/OpenGL ES compatibility (built as part of Skia)
@@ -303,10 +304,12 @@ PLATFORM_GN_ARGS = {
     extra_cflags_c = ["-Wno-error"]
     """,
 
+    # Note: Dawn is disabled for Android due to C++20 std::lexicographical_compare_three_way
+    # compatibility issues with Android NDK's libc++. Android uses native Vulkan/GLES directly.
     "android": f"""
     target_os = "android"
     skia_use_vulkan = true
-    skia_use_dawn = true
+    skia_use_dawn = false
     skia_use_angle = true
     skia_use_gl = true
     skia_use_freetype = true
