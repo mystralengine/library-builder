@@ -548,13 +548,15 @@ class SkiaBuildScript:
         output_dir = TMP_DIR / f"{self.platform}_{self.config}_{arch}_{self.variant}"
         gn_args = BASIC_GN_ARGS
 
+        # Add shared release args first, then platform-specific args can override
+        gn_args += RELEASE_GN_ARGS
+
         # Use CPU or GPU platform-specific args based on variant
         if self.variant == "cpu":
             gn_args += PLATFORM_GN_ARGS_CPU[self.platform]
             gn_args += CPU_ONLY_GN_ARGS
         else:
             gn_args += PLATFORM_GN_ARGS[self.platform]
-        gn_args += RELEASE_GN_ARGS
 
         if self.config == 'Debug':
             gn_args += "is_debug = true\n"

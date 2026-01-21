@@ -76,16 +76,16 @@ jobs:
           - os: ubuntu-latest
             platform: linux
             arch: x64
-          # Android builds
+          # Android builds (arm64 only for now)
           - os: ubuntu-latest
             platform: android
             arch: arm64
-          - os: ubuntu-latest
-            platform: android
-            arch: arm
-          - os: ubuntu-latest
-            platform: android
-            arch: x64
+          # - os: ubuntu-latest
+          #   platform: android
+          #   arch: arm
+          # - os: ubuntu-latest
+          #   platform: android
+          #   arch: x64
           # WASM builds
           - os: ubuntu-latest
             platform: wasm
