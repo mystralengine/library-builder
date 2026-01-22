@@ -5,14 +5,14 @@ use std::ptr;
 use anyhow::{Context, Result};
 use swc_core::common::{
     errors::{ColorConfig, Handler, EmitterWriter},
-    FileName, SourceMap, Globals, GLOBALS,
+    FileName, SourceMap, Globals, GLOBALS, Mark,
     sync::Lrc,
-    Mark,
 };
 use swc_core::ecma::codegen::{text_writer::JsWriter, Config, Emitter};
-use swc_core::ecma::parser::{lexer::Lexer, Parser, StringInput, Syntax, ts::TsConfig};
+use swc_core::ecma::parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use swc_core::ecma::transforms::typescript::strip;
-use swc_core::ecma::visit::{FoldWith, as_folder};
+use swc_core::ecma::visit::FoldWith;
+use swc_core::ecma::transforms::base::pass::as_folder;
 
 #[no_mangle]
 pub unsafe extern "C" fn swc_transpile_ts(
@@ -92,11 +92,11 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
 
         let fm = cm.new_source_file(FileName::Real(filename.into()).into(), source.into());
 
-        let syntax = Syntax::Typescript(TsConfig {
-            tsx: filename.ends_with(".tsx"),
-            decorators: true,
-            ..Default::default()
-        });
+        let mut syntax = Syntax::Typescript(Default::default());
+        if let Syntax::Typescript(config) = &mut syntax {
+            config.tsx = filename.ends_with(".tsx");
+            config.decorators = true;
+        }
 
         let lexer = Lexer::new(
             syntax,
