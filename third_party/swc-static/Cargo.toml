@@ -7,13 +7,8 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-swc_common = { version = "0.33", features = ["tty-emitter"] }
-swc_ecma_parser = "0.141"
-swc_ecma_codegen = "0.146"
-swc_ecma_transforms_typescript = "0.184"
-swc_ecma_transforms_base = "0.133"
-swc_ecma_ast = "0.110"
-swc_ecma_visit = "0.96"
+# Use swc_core to ensure compatible versions of sub-crates
+swc_core = { version = "0.93.0", features = ["common", "ecma_parser", "ecma_codegen", "ecma_transforms_typescript", "ecma_visit", "ecma_ast", "common_tty_emitter"] }
 anyhow = "1.0"
-serde = { version = "=1.0.188", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

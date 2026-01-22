@@ -4,14 +4,14 @@ use std::ptr;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use swc_common::{
+use swc_core::common::{
     errors::{ColorConfig, Handler},
-    FileName, SourceMap, Globals, GLOBALS,
+    FileName, SourceMap, Globals, GLOBALS, Mark,
 };
-use swc_ecma_codegen::{text_writer::JsWriter, Config, Emitter};
-use swc_ecma_parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
-use swc_ecma_transforms_typescript::strip;
-use swc_ecma_visit::FoldWith;
+use swc_core::ecma::codegen::{text_writer::JsWriter, Config, Emitter};
+use swc_core::ecma::parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+use swc_core::ecma::transforms::typescript::strip;
+use swc_core::ecma::visit::FoldWith;
 
 #[no_mangle]
 pub unsafe extern "C" fn swc_transpile_ts(
@@ -104,8 +104,8 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
             })?;
 
         // Apply transforms
-        // For now, just strip types.
-        let program = program.fold_with(&mut strip(swc_common::Mark::new()));
+        // swc_core::ecma::transforms::typescript::strip takes a Mark.
+        let program = program.fold_with(&mut strip(Mark::new()));
 
         // Emit
         let mut buf = vec![];
