@@ -186,6 +186,8 @@ cxx = "clang++"
 """
 
 # Shared GN args
+# Note: libwebp is built separately (build-webp.py), so we disable webp in Skia.
+# Users can link libwebp directly for webp encode/decode support.
 RELEASE_GN_ARGS = f"""
 skia_use_system_libjpeg_turbo = false
 skia_use_system_libpng = false
@@ -194,7 +196,7 @@ skia_use_system_expat = false
 skia_use_system_icu = false
 skia_use_system_harfbuzz = false
 
-skia_use_libwebp_decode = true
+skia_use_libwebp_decode = false
 skia_use_libwebp_encode = false
 skia_use_xps = false
 skia_use_dng_sdk = false
@@ -315,8 +317,6 @@ PLATFORM_GN_ARGS = {
     skia_use_freetype = true
     skia_use_system_freetype2 = false
     skia_use_fontconfig = false
-    skia_use_libwebp_decode = false
-    skia_use_libwebp_encode = false
     ndk_api = {ANDROID_MIN_API}
     extra_cflags_c = ["-Wno-error"]
     """
