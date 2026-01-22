@@ -4,15 +4,14 @@ use std::ptr;
 
 use anyhow::{Context, Result};
 use swc_core::common::{
-    errors::{ColorConfig, Handler, EmitterWriter},
+    errors::{Handler, EmitterWriter},
     FileName, SourceMap, Globals, GLOBALS, Mark,
     sync::Lrc,
 };
 use swc_core::ecma::codegen::{text_writer::JsWriter, Config, Emitter};
 use swc_core::ecma::parser::{lexer::Lexer, Parser, StringInput, Syntax};
 use swc_core::ecma::transforms::typescript::strip;
-use swc_core::ecma::visit::FoldWith;
-use swc_core::ecma::transforms::base::pass::as_folder;
+// use swc_core::ecma::visit::FoldWith; // fold_with replaced by apply
 
 #[no_mangle]
 pub unsafe extern "C" fn swc_transpile_ts(
@@ -107,7 +106,7 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
 
         let mut parser = Parser::new_from(lexer);
 
-        let program = parser
+        let mut program = parser
             .parse_program()
             .map_err(|e| {
                 e.into_diagnostic(&handler).emit();
@@ -115,8 +114,8 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
             })?;
 
         // Apply transforms
-        // Use as_folder to convert Pass to Fold
-        let program = program.fold_with(&mut as_folder(strip(Mark::new(), Mark::new())));
+        // Use apply directly if supported by Program, or map over program
+        program.apply(&mut strip(Mark::new(), Mark::new()));
 
         // Emit
         let mut buf = vec![];
