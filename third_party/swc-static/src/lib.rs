@@ -1,17 +1,18 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
 use std::ptr;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use swc_core::common::{
     errors::{ColorConfig, Handler, EmitterWriter},
-    FileName, SourceMap, Globals, GLOBALS, Mark,
+    FileName, SourceMap, Globals, GLOBALS,
+    sync::Lrc,
+    Mark,
 };
 use swc_core::ecma::codegen::{text_writer::JsWriter, Config, Emitter};
-use swc_core::ecma::parser::{lexer::Lexer, Parser, StringInput, Syntax, TsConfig};
+use swc_core::ecma::parser::{lexer::Lexer, Parser, StringInput, Syntax, ts::TsConfig};
 use swc_core::ecma::transforms::typescript::strip;
-use swc_core::ecma::visit::FoldWith;
+use swc_core::ecma::visit::{FoldWith, as_folder};
 
 #[no_mangle]
 pub unsafe extern "C" fn swc_transpile_ts(
@@ -76,8 +77,8 @@ pub unsafe extern "C" fn swc_free(ptr: *mut c_char) {
 fn transpile(source: &str, filename: &str) -> Result<String> {
     let globals = Globals::new();
     GLOBALS.set(&globals, || {
-        let cm = Arc::<SourceMap>::default();
-        // Use standard EmitterWriter instead of TTY emitter to avoid feature requirements
+        let cm: Lrc<SourceMap> = Default::default();
+        
         let handler = Handler::with_emitter(
             true,
             false,
@@ -89,7 +90,7 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
             )),
         );
 
-        let fm = cm.new_source_file(FileName::Real(filename.into()), source.into());
+        let fm = cm.new_source_file(FileName::Real(filename.into()).into(), source.into());
 
         let syntax = Syntax::Typescript(TsConfig {
             tsx: filename.ends_with(".tsx"),
@@ -114,8 +115,8 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
             })?;
 
         // Apply transforms
-        // swc_core::ecma::transforms::typescript::strip takes a Mark.
-        let program = program.fold_with(&mut strip(Mark::new()));
+        // Use as_folder to convert Pass to Fold
+        let program = program.fold_with(&mut as_folder(strip(Mark::new(), Mark::new())));
 
         // Emit
         let mut buf = vec![];
@@ -124,7 +125,7 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
                 cfg: Config::default(),
                 cm: cm.clone(),
                 comments: None,
-                wr: JsWriter::new(cm, "\n", &mut buf, None),
+                wr: JsWriter::new(cm.clone(), "\n", &mut buf, None),
             };
 
             emitter.emit_program(&program).context("Failed to emit JS")?;
