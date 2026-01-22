@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use swc_core::common::{
-    errors::{ColorConfig, Handler},
+    errors::{ColorConfig, Handler, EmitterWriter},
     FileName, SourceMap, Globals, GLOBALS, Mark,
 };
 use swc_core::ecma::codegen::{text_writer::JsWriter, Config, Emitter};
@@ -77,7 +77,17 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
     let globals = Globals::new();
     GLOBALS.set(&globals, || {
         let cm = Arc::<SourceMap>::default();
-        let handler = Handler::with_tty_emitter(ColorConfig::Auto, true, false, Some(cm.clone()));
+        // Use standard EmitterWriter instead of TTY emitter to avoid feature requirements
+        let handler = Handler::with_emitter(
+            true,
+            false,
+            Box::new(EmitterWriter::new(
+                Box::new(std::io::stderr()),
+                Some(cm.clone()),
+                false,
+                true,
+            )),
+        );
 
         let fm = cm.new_source_file(FileName::Real(filename.into()), source.into());
 
