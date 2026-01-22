@@ -27,7 +27,10 @@ jobs:
         include:
           - os: macos-latest
             platform: mac
-            arch: "arm64,x86_64"
+            arch: arm64
+          - os: macos-latest
+            platform: mac
+            arch: x86_64
           - os: ubuntu-latest
             platform: linux
             arch: x64
@@ -50,18 +53,6 @@ jobs:
         run: |
           python3 build-swc.py ${{ matrix.platform }} -archs "${{ matrix.arch }}" -out build
 
-      - name: Create Universal Binary (macOS)
-        if: matrix.platform == 'mac'
-        run: |
-          echo "Creating universal binary..."
-          lipo -create \
-            build/swc-mac/lib/arm64/libswc.a \
-            build/swc-mac/lib/x86_64/libswc.a \
-            -output build/swc-mac/lib/libswc.a
-          # Remove arch-specific folders to clean up
-          rm -rf build/swc-mac/lib/arm64
-          rm -rf build/swc-mac/lib/x86_64
-
       - name: Prepare Artifacts
         shell: bash
         run: |
@@ -69,13 +60,7 @@ jobs:
           
           PLATFORM="${{ matrix.platform }}"
           ARCH="${{ matrix.arch }}"
-          NAME="swc-${PLATFORM}"
-          
-          if [[ "$PLATFORM" == "mac" ]]; then
-            NAME="${NAME}-universal"
-          else
-            NAME="${NAME}-${ARCH}"
-          fi
+          NAME="swc-${PLATFORM}-${ARCH}"
           
           # Copy lib
           if [[ "$PLATFORM" == "win" ]]; then
@@ -126,7 +111,8 @@ jobs:
             Automated SWC static library build.
 
             ## Platforms
-            - macOS (universal arm64/x86_64)
+            - macOS (arm64)
+            - macOS (x86_64)
             - Windows (x64)
             - Linux (x64)
 
