@@ -89,7 +89,7 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
             )),
         );
 
-        let fm = cm.new_source_file(FileName::Real(filename.into()).into(), source.into());
+        let fm = cm.new_source_file(FileName::Real(filename.into()).into(), source.to_string());
 
         let mut syntax = Syntax::Typescript(Default::default());
         if let Syntax::Typescript(config) = &mut syntax {
@@ -106,7 +106,7 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
 
         let mut parser = Parser::new_from(lexer);
 
-        let mut program = parser
+        let program = parser
             .parse_program()
             .map_err(|e| {
                 e.into_diagnostic(&handler).emit();
@@ -115,7 +115,7 @@ fn transpile(source: &str, filename: &str) -> Result<String> {
 
         // Apply transforms
         // Use apply directly if supported by Program, or map over program
-        program.apply(&mut strip(Mark::new(), Mark::new()));
+        let program = program.apply(&mut strip(Mark::new(), Mark::new()));
 
         // Emit
         let mut buf = vec![];
