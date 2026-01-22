@@ -1,0 +1,139 @@
+name: Build SWC
+run-name: Build SWC
+on:
+  schedule:
+    # Run weekly on Monday at 9:00 AM UTC (1:00 AM PST)
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-swc:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: "arm64,x86_64"
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build SWC
+        shell: bash
+        run: |
+          python3 build-swc.py ${{ matrix.platform }} -archs "${{ matrix.arch }}" -out build
+
+      - name: Create Universal Binary (macOS)
+        if: matrix.platform == 'mac'
+        run: |
+          echo "Creating universal binary..."
+          lipo -create \
+            build/swc-mac/lib/arm64/libswc.a \
+            build/swc-mac/lib/x86_64/libswc.a \
+            -output build/swc-mac/lib/libswc.a
+          # Remove arch-specific folders to clean up
+          rm -rf build/swc-mac/lib/arm64
+          rm -rf build/swc-mac/lib/x86_64
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="swc-${PLATFORM}"
+          
+          if [[ "$PLATFORM" == "mac" ]]; then
+            NAME="${NAME}-universal"
+          else
+            NAME="${NAME}-${ARCH}"
+          fi
+          
+          # Copy lib
+          if [[ "$PLATFORM" == "win" ]]; then
+            cp build/swc-win/lib/swc.lib artifacts/
+          else
+            cp build/swc-${PLATFORM}/lib/libswc.a artifacts/
+          fi
+          
+          # Copy header
+          cp build/include/swc.h artifacts/
+          
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  create-release:
+    needs: build-swc
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+          
+          # Iterate over downloaded artifacts
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            # Zip the content of each artifact directory
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: swc-${{ github.run_number }}
+          name: SWC Static Build ${{ github.run_number }}
+          body: |
+            Automated SWC static library build.
+
+            ## Platforms
+            - macOS (universal arm64/x86_64)
+            - Windows (x64)
+            - Linux (x64)
+
+            ## Contents
+            - `libswc.a` / `swc.lib`
+            - `swc.h`
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false
