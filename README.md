@@ -4,10 +4,21 @@ This repository provides automated builds of static libraries for [Mystral Engin
 
 **Currently supported:**
 - [Skia](https://skia.org/) - 2D graphics library with Dawn/Graphite support
+- [libwebp](https://chromium.googlesource.com/webm/libwebp/) - WebP codec to encode & decode images in WebP format
+- [swc](https://github.com/swc-project/swc) - Speedy Web Compiler to compile typescript.
 
 **Planned:**
-- V8 - JavaScript engine
-- ANGLE - OpenGL ES to other backends
+- V8 - JavaScript engine. Currently using older build from https://github.com/kuoruan/libv8
+- ANGLE - OpenGL ES to other backends - no good cross platform solution yet (individual repos w/ Windows & Linux builds, but no cross platform support).
+
+**Dependencies with existing prebuilt libraries**
+- Dawn - https://github.com/google/dawn/releases - Google / Chrome's WebGPU implementation. Note however that this doesn't have iOS releases, while the Skia build above does have a Dawn iOS release associated.
+- wgpu-native - https://github.com/gfx-rs/wgpu-native - built from wgpu, a rust based implementation of WebGPU (webgpu.h) used in Firefox.
+- SDL3 - https://github.com/libsdl-org/SDL/releases - Simple DirectMedia Layer - a cross-platform development library designed to provide low level access to audio, keyboard, mouse, joystick, and graphics hardware via OpenGL/Direct3D/Metal/Vulkan.
+
+**Dependencies that don't need prebuilds**
+- quickjs / quickjs-ng - https://github.com/quickjs-ng/quickjs - specifically ng because of Windows support which quickjs doesn't have.
+- JSC - Javascript Core - only available on Mac / iOS (bun has a windows build, but can't find if it is available independently). Built into OS.
 
 **Fork of:** [olilarkin/skia-builder](https://github.com/olilarkin/skia-builder)
 
