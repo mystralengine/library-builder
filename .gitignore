@@ -6,3 +6,6 @@ example/.cache
 .vs
 example/build-*
 .claude/
+monitor_build.py
+tasks/
+third_party/swc-static/target/
