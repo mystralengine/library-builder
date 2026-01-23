@@ -4,11 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository (mystralengine/library-builder) provides Python scripts and GitHub Actions workflows for building static libraries for Mystral Engine dependencies. Currently supports Skia, with plans to add V8, ANGLE, and other libraries.
+This repository (mystralengine/library-builder) provides Python scripts and GitHub Actions workflows for building static libraries for Mystral Engine dependencies.
 
-The Skia build script supports multiple platforms (macOS, iOS, visionOS, Android, Windows, Linux, WASM) and automates build environment setup, repository cloning, GN argument configuration, and compilation.
+**Currently supported:**
+- **Skia** - 2D graphics library with GPU support (Dawn/Graphite/Metal/Vulkan)
+- **libwebp** - WebP codec for image encoding/decoding
+- **SWC** - Speedy Web Compiler for TypeScript compilation
 
 **Fork of:** [olilarkin/skia-builder](https://github.com/olilarkin/skia-builder)
+
+## Build Scripts
+
+| Script | Purpose | Platforms |
+|--------|---------|-----------|
+| `build-skia.py` | Build Skia graphics library | macOS, iOS, visionOS, Android, Windows, Linux, WASM |
+| `build-webp.py` | Build libwebp codec | macOS, iOS, visionOS, Android, Windows, Linux, WASM |
+| `build-swc.py` | Build SWC TypeScript compiler | macOS (arm64, x86_64), Linux, Windows |
 
 ## Build Commands
 
@@ -150,7 +161,94 @@ gh workflow run create-xcframework.yml -f release_tag=main-20260121
 | macOS | universal, arm64, x86_64 | GPU | Dawn/Metal |
 | iOS | device-arm64, simulator-arm64+x86_64 | GPU | Dawn/Metal |
 | visionOS | device-arm64, simulator-arm64 | GPU | Dawn/Metal |
-| Android | arm64, arm, x64 | GPU | Dawn/Vulkan |
+| Android | arm64, arm, x64 | GPU | Native Vulkan (no Dawn due to NDK C++20 issues) |
 | Windows | x64 | GPU + static CRT, GPU + dynamic CRT | Dawn/D3D |
 | Linux | x64 | GPU | Dawn/Vulkan |
-| WASM | wasm32 | GPU | WebGL/WebGPU |
+| WASM | wasm32 | GPU | WebGL/WebGPU (Ganesh only, no Graphite) |
+
+## Skia Libraries Built
+
+**Core libraries (all platforms):**
+- `libskia.a` - Core 2D graphics
+- `libskshaper.a` - Text shaping with HarfBuzz
+- `libskparagraph.a` - Paragraph layout
+- `libsvg.a` - SVG rendering
+- `libskunicode_core.a` + `libskunicode_icu.a` - Unicode support
+
+**Additional libraries (most platforms, not WASM):**
+- `libskottie.a` - Vector animation (Lottie)
+- `libsksg.a` - Scene graph
+
+**GPU libraries:**
+- `libdawn_combined.a` - WebGPU abstraction (macOS, iOS, visionOS, Windows, Linux)
+- `libEGL.a` / `libGLESv2.a` - ANGLE for WebGL/OpenGL ES translation
+
+## Troubleshooting
+
+### Build Failures
+
+**WASM "unknown target 'libskottie.a'":**
+- WASM disables skottie in GN args, so these targets don't exist
+- The `LIBS["wasm"]` dict should not include skottie/sksg
+- Fixed in commit `cdfd5a2`
+
+**visionOS build issues:**
+- GN doesn't recognize "xros" as a target OS
+- We use `target_os = "ios"` with explicit `-target arm64-apple-xros1.0` flags
+- See `generate_gn_args()` for the workaround
+
+**Android Dawn C++20 errors:**
+- Android NDK's libc++ lacks `std::lexicographical_compare_three_way`
+- Dawn is disabled for Android; uses native Vulkan directly
+- Set `skia_use_dawn = false` in Android GN args
+
+**Windows CRT mismatches:**
+- Static CRT (`/MT`) and dynamic CRT (`/MD`) builds cannot be mixed
+- Choose one based on your other dependencies
+- Dawn typically requires dynamic CRT
+
+### CI/CD
+
+**Artifacts not appearing in release:**
+- Check that all matrix jobs succeeded
+- Release only created when `platforms=all` and `skip_release=false`
+- Artifacts from failed runs can be downloaded individually
+
+**Cache issues:**
+- Cache key includes `build-skia.py` hash and branch name
+- Force cache rebuild by modifying `build-skia.py` or using different branch
+
+## Release Artifacts
+
+Each release includes zip files with this naming convention:
+```
+skia-build-{platform}-{target}-{arch}-{crt}-{variant}-{config}.zip
+```
+
+Examples:
+- `skia-build-mac-universal-gpu-release.zip`
+- `skia-build-ios-device-arm64-gpu-release.zip`
+- `skia-build-ios-simulator-arm64-x86_64-gpu-release.zip`
+- `skia-build-win-x64-static-gpu-release.zip`
+- `skia-build-win-x64-dynamic-gpu-debug.zip`
+- `Skia.xcframework.zip` (combined Apple platforms)
+
+## Other Workflows
+
+### libwebp (`build-webp.yml`)
+```bash
+gh workflow run build-webp.yml
+```
+Builds: `libwebp.a`, `libwebpdecoder.a`, `libwebpdemux.a`, `libwebpmux.a`, `libsharpyuv.a`
+
+### SWC (`build-swc.yml`)
+```bash
+gh workflow run build-swc.yml
+```
+Builds Rust-based SWC compiler as static library for C++ integration.
+
+### XCFramework from Release (`create-xcframework.yml`)
+```bash
+gh workflow run create-xcframework.yml -f release_tag=main-20260121
+```
+Creates XCFramework from existing release without rebuilding.
