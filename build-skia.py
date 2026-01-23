@@ -105,10 +105,10 @@ LIBS = {
         "skparagraph.lib", "svg.lib", "skunicode_core.lib",
         "skunicode_libgrapheme.lib" if USE_LIBGRAPHEME else "skunicode_icu.lib"
     ],
-    # WASM: skottie/sksg disabled for WASM
+    # WASM: skottie/sksg/svg disabled for WASM (svg requires expat which is disabled)
     "wasm": [
         "libskia.a", "libskshaper.a",
-        "libskparagraph.a", "libsvg.a", "libskunicode_core.a",
+        "libskparagraph.a", "libskunicode_core.a",
         "libskunicode_libgrapheme.a" if USE_LIBGRAPHEME else "libskunicode_icu.a"
     ],
     "linux": [
