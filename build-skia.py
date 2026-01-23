@@ -221,6 +221,15 @@ PLATFORM_GN_ARGS = {
     skia_use_angle = true
     target_os = "mac"
     extra_cflags_c = ["-Wno-error"]
+
+    # Dawn backend configuration - enable actual WebGPU implementations
+    dawn_enable_metal = true
+    dawn_enable_vulkan = false
+    dawn_enable_d3d11 = false
+    dawn_enable_d3d12 = false
+    dawn_enable_null = false
+    dawn_enable_desktop_gl = false
+    dawn_enable_opengles = false
     """,
 
     "ios": f"""
@@ -230,6 +239,15 @@ PLATFORM_GN_ARGS = {
     target_os = "ios"
     skia_ios_use_signing = false
     extra_cflags_c = ["-Wno-error"]
+
+    # Dawn backend configuration - enable actual WebGPU implementations
+    dawn_enable_metal = true
+    dawn_enable_vulkan = false
+    dawn_enable_d3d11 = false
+    dawn_enable_d3d12 = false
+    dawn_enable_null = false
+    dawn_enable_desktop_gl = false
+    dawn_enable_opengles = false
     """,
 
     # visionOS: Use target_os="ios" because GN doesn't recognize "xros".
@@ -243,6 +261,15 @@ PLATFORM_GN_ARGS = {
     target_os = "ios"
     skia_ios_use_signing = false
     extra_cflags_c = ["-Wno-error"]
+
+    # Dawn backend configuration - enable actual WebGPU implementations
+    dawn_enable_metal = true
+    dawn_enable_vulkan = false
+    dawn_enable_d3d11 = false
+    dawn_enable_d3d12 = false
+    dawn_enable_null = false
+    dawn_enable_desktop_gl = false
+    dawn_enable_opengles = false
     """,
 
     "win": """
@@ -250,6 +277,15 @@ PLATFORM_GN_ARGS = {
     skia_use_direct3d = true
     skia_use_angle = true
     is_trivial_abi = false
+
+    # Dawn backend configuration - enable actual WebGPU implementations
+    # Without these, dawn_combined.lib only contains proc stubs
+    dawn_enable_d3d11 = true
+    dawn_enable_d3d12 = true
+    dawn_enable_vulkan = false
+    dawn_enable_null = false
+    dawn_enable_desktop_gl = false
+    dawn_enable_opengles = false
     """,
 
     "wasm": """
@@ -303,6 +339,15 @@ PLATFORM_GN_ARGS = {
     skia_use_freetype = true
     skia_use_system_freetype2 = false
     extra_cflags_c = ["-Wno-error"]
+
+    # Dawn backend configuration - enable actual WebGPU implementations
+    dawn_enable_vulkan = true
+    dawn_enable_d3d11 = false
+    dawn_enable_d3d12 = false
+    dawn_enable_metal = false
+    dawn_enable_null = false
+    dawn_enable_desktop_gl = false
+    dawn_enable_opengles = false
     """,
 
     # Note: Dawn is disabled for Android due to C++20 std::lexicographical_compare_three_way
