@@ -1,0 +1,155 @@
+name: Build libuv
+run-name: Build libuv
+on:
+  workflow_dispatch:
+    inputs:
+      libuv_version:
+        description: 'libuv version to build'
+        required: false
+        type: string
+        default: '1.51.0'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-libuv:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: macos-13
+            platform: mac
+            arch: x86_64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install ninja
+          fi
+
+      - name: Build libuv
+        shell: bash
+        run: |
+          python3 build-libuv.py ${{ matrix.platform }} \
+            -archs "${{ matrix.arch }}" \
+            -version "${{ inputs.libuv_version || '1.51.0' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="libuv-${PLATFORM}-${ARCH}"
+
+          # Copy lib
+          if [[ "$PLATFORM" == "win" ]]; then
+            cp build/libuv-win/lib/libuv.lib artifacts/
+          elif [[ "$PLATFORM" == "mac" ]]; then
+            cp build/libuv-mac/lib/${ARCH}/libuv.a artifacts/
+          else
+            cp build/libuv-${PLATFORM}/lib/libuv.a artifacts/
+          fi
+
+          # Copy headers
+          cp -r build/include artifacts/
+
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  create-release:
+    needs: build-libuv
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+
+          # Iterate over downloaded artifacts
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            # Zip the content of each artifact directory
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: libuv-${{ inputs.libuv_version || '1.51.0' }}-${{ github.run_number }}
+          name: libuv ${{ inputs.libuv_version || '1.51.0' }} Build ${{ github.run_number }}
+          body: |
+            Automated libuv static library build.
+
+            **Version:** ${{ inputs.libuv_version || '1.51.0' }}
+
+            ## Platforms
+            - macOS arm64
+            - macOS x86_64
+            - Windows x64 (static CRT /MT)
+            - Linux x64
+
+            ## Contents
+            - `libuv.a` / `libuv.lib` - Static library
+            - `include/uv.h` - Main header
+            - `include/uv/` - Platform-specific headers
+
+            ## Usage
+            Link with the static library and include headers:
+            ```cmake
+            add_library(libuv STATIC IMPORTED)
+            set_target_properties(libuv PROPERTIES
+                IMPORTED_LOCATION ${LIBUV_DIR}/lib/libuv.a
+                INTERFACE_INCLUDE_DIRECTORIES ${LIBUV_DIR}/include
+            )
+            target_link_libraries(your_target PRIVATE libuv)
+            ```
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false
