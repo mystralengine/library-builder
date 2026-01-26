@@ -1,0 +1,160 @@
+name: Build Draco
+run-name: Build Draco
+on:
+  workflow_dispatch:
+    inputs:
+      draco_version:
+        description: 'Draco version to build'
+        required: false
+        type: string
+        default: '1.5.7'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-draco:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: macos-15-intel
+            platform: mac
+            arch: x86_64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install ninja
+          fi
+
+      - name: Build Draco
+        shell: bash
+        run: |
+          python3 build-draco.py ${{ matrix.platform }} \
+            -archs "${{ matrix.arch }}" \
+            -version "${{ inputs.draco_version || '1.5.7' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="draco-${PLATFORM}-${ARCH}"
+
+          # Copy lib
+          if [[ "$PLATFORM" == "win" ]]; then
+            cp build/draco-win/lib/draco.lib artifacts/
+          elif [[ "$PLATFORM" == "mac" ]]; then
+            cp build/draco-mac/lib/${ARCH}/libdraco.a artifacts/
+          else
+            cp build/draco-${PLATFORM}/lib/libdraco.a artifacts/
+          fi
+
+          # Copy headers
+          cp -r build/include artifacts/
+
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  create-release:
+    needs: build-draco
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+
+          # Iterate over downloaded artifacts
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            # Zip the content of each artifact directory
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: draco-${{ inputs.draco_version || '1.5.7' }}-${{ github.run_number }}
+          name: Draco ${{ inputs.draco_version || '1.5.7' }} Build ${{ github.run_number }}
+          body: |
+            Automated Draco static library build.
+
+            **Version:** ${{ inputs.draco_version || '1.5.7' }}
+
+            ## Platforms
+            - macOS arm64
+            - macOS x86_64
+            - Windows x64 (static CRT /MT)
+            - Linux x64
+
+            ## Contents
+            - `libdraco.a` / `draco.lib` - Static library (decode only)
+            - `include/draco/` - Headers (compression, core, mesh, point_cloud, attributes)
+
+            ## Features Enabled
+            - Mesh compression / decompression
+            - Point cloud compression / decompression
+            - No WASM/JS glue (native C++ only)
+            - No animation encoding, transcoder, or tools
+
+            ## Usage
+            Link with the static library and include headers:
+            ```cmake
+            add_library(draco::draco STATIC IMPORTED)
+            set_target_properties(draco::draco PROPERTIES
+                IMPORTED_LOCATION ${DRACO_DIR}/lib/libdraco.a
+                INTERFACE_INCLUDE_DIRECTORIES ${DRACO_DIR}/include
+            )
+            target_link_libraries(your_target PRIVATE draco::draco)
+            ```
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false
