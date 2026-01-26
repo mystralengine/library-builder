@@ -187,34 +187,16 @@ def copy_headers(source_dir, cmake_build_dir, output_dir):
     include_dest = output_dir / "include" / "draco"
     include_dest.mkdir(parents=True, exist_ok=True)
 
-    # Copy public API headers from source
+    # Recursively copy ALL .h files from src/draco/, preserving directory structure.
+    # This captures subdirectories like compression/config/ that are needed transitively.
     src_include = source_dir / "src" / "draco"
 
-    # Key header directories needed for decoding
-    header_dirs = [
-        "compression",
-        "core",
-        "mesh",
-        "point_cloud",
-        "attributes",
-        "metadata",
-    ]
-
-    for hdir in header_dirs:
-        src_dir = src_include / hdir
-        if src_dir.exists():
-            dest_dir = include_dest / hdir
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            for header in src_dir.glob("*.h"):
-                dest = dest_dir / header.name
-                shutil.copy2(header, dest)
-                print(f"Copied header: draco/{hdir}/{header.name}")
-
-    # Copy top-level draco headers
-    for header in src_include.glob("*.h"):
-        dest = include_dest / header.name
+    for header in src_include.rglob("*.h"):
+        rel_path = header.relative_to(src_include)
+        dest = include_dest / rel_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(header, dest)
-        print(f"Copied header: draco/{header.name}")
+        print(f"Copied header: draco/{rel_path}")
 
     # Copy CMake-generated draco_features.h (critical - defines feature macros)
     features_header = cmake_build_dir / "draco" / "draco_features.h"
