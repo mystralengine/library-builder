@@ -1,7 +1,8 @@
 diff --git a/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp b/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
+index 1234567..abcdefg 100644
 --- a/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
 +++ b/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
-@@ -28,6 +28,7 @@
+@@ -31,6 +31,7 @@
 
  #include "dawn/native/d3d/D3DError.h"
  #include "dawn/native/d3d/PlatformFunctions.h"
@@ -10,9 +11,10 @@ diff --git a/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.c
  #include "dawn/native/d3d11/QueueD3D11.h"
  #include "dawn/utils/SystemHandle.h"
 diff --git a/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp b/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp
+index 1234567..abcdefg 100644
 --- a/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp
 +++ b/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp
-@@ -40,6 +40,7 @@
+@@ -44,6 +44,7 @@
  #include "dawn/native/d3d/D3DError.h"
  #include "dawn/native/d3d/UtilsD3D.h"
  #include "dawn/native/d3d11/CommandRecordingContextD3D11.h"
