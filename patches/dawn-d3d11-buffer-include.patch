@@ -1,0 +1,22 @@
+diff --git a/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp b/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
+--- a/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
++++ b/third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
+@@ -28,6 +28,7 @@
+
+ #include "dawn/native/d3d/D3DError.h"
+ #include "dawn/native/d3d/PlatformFunctions.h"
++#include "dawn/native/d3d11/BufferD3D11.h"
+ #include "dawn/native/d3d11/DeviceD3D11.h"
+ #include "dawn/native/d3d11/QueueD3D11.h"
+ #include "dawn/utils/SystemHandle.h"
+diff --git a/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp b/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp
+--- a/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp
++++ b/third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp
+@@ -40,6 +40,7 @@
+ #include "dawn/native/d3d/D3DError.h"
+ #include "dawn/native/d3d/UtilsD3D.h"
+ #include "dawn/native/d3d11/CommandRecordingContextD3D11.h"
++#include "dawn/native/d3d11/BufferD3D11.h"
+ #include "dawn/native/d3d11/DeviceD3D11.h"
+ #include "dawn/native/d3d11/Forward.h"
+ #include "dawn/native/d3d11/QueueD3D11.h"

@@ -494,6 +494,7 @@ class SkiaBuildScript:
         parser.add_argument("-config", choices=["Debug", "Release"], default="Release", help="Build configuration")
         parser.add_argument("-archs", help="Target architectures (comma-separated)")
         parser.add_argument("-branch", help="Skia Git branch to checkout", default="main")
+        parser.add_argument("-commit", help="Specific Skia Git commit SHA to checkout (after cloning branch)")
         parser.add_argument("-variant", choices=["cpu", "gpu"], default="gpu",
                            help="Build variant: cpu (no GPU) or gpu (with Graphite/Dawn)")
         parser.add_argument("-target", choices=["device", "simulator", "all"], default="all",
@@ -520,6 +521,7 @@ class SkiaBuildScript:
                 self.archs = self.get_default_archs()
 
         self.branch = args.branch
+        self.commit = args.commit
         self.variant = args.variant
         self.target = args.target
         self.crt = args.crt
@@ -1148,22 +1150,31 @@ extra_ldflags = ["-mmacosx-version-min={mac_min_version}"]
         colored_print("Cleaned up temporary directories", Colors.OKBLUE)
 
     def setup_skia_repo(self):
-        colored_print(f"Setting up Skia repository (branch: {self.branch})...", Colors.OKBLUE)
+        commit_info = f" at commit {self.commit[:12]}" if self.commit else ""
+        colored_print(f"Setting up Skia repository (branch: {self.branch}{commit_info})...", Colors.OKBLUE)
         if not SKIA_SRC_DIR.exists():
             clone_command = ["git", "clone"]
-            if self.shallow_clone:
+            # If checking out a specific commit, we need more depth
+            if self.shallow_clone and not self.commit:
                 clone_command.extend(["--depth", "1"])
             clone_command.extend(["--branch", self.branch, SKIA_GIT_URL, str(SKIA_SRC_DIR)])
             subprocess.run(clone_command, check=True)
         else:
             os.chdir(SKIA_SRC_DIR)
             fetch_command = ["git", "fetch"]
-            if self.shallow_clone:
+            # If checking out a specific commit, we need more depth
+            if self.shallow_clone and not self.commit:
                 fetch_command.extend(["--depth", "1"])
             fetch_command.extend(["origin", self.branch])
             subprocess.run(fetch_command, check=True)
             subprocess.run(["git", "checkout", self.branch], check=True)
             subprocess.run(["git", "reset", "--hard", f"origin/{self.branch}"], check=True)
+
+        # If a specific commit is specified, checkout that commit
+        if self.commit:
+            os.chdir(SKIA_SRC_DIR)
+            colored_print(f"Checking out specific commit: {self.commit}", Colors.OKBLUE)
+            subprocess.run(["git", "checkout", self.commit], check=True)
         colored_print("Skia repository setup complete.", Colors.OKGREEN)
 
     def setup_gn_for_windows_arm64(self):

@@ -11,6 +11,11 @@ on:
         required: false
         type: string
         default: 'main'
+      skia_commit:
+        description: 'Specific Skia commit SHA to checkout (leave empty for branch HEAD)'
+        required: false
+        type: string
+        default: ''
       platforms:
         description: 'Platforms to build (comma-separated, or "all")'
         required: false
@@ -133,8 +138,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       SKIA_BRANCH: ${{ inputs.skia_branch || 'main' }}
+      SKIA_COMMIT: ${{ inputs.skia_commit || '' }}
     outputs:
       skia_branch: ${{ env.SKIA_BRANCH }}
+      skia_commit: ${{ env.SKIA_COMMIT }}
     steps:
       - name: Check if platform should build
         id: check
@@ -252,8 +259,12 @@ jobs:
           if [ -n "${{ matrix.crt }}" ]; then
             CRT_ARG="-crt ${{ matrix.crt }}"
           fi
+          COMMIT_ARG=""
+          if [ -n "${{ env.SKIA_COMMIT }}" ]; then
+            COMMIT_ARG="-commit ${{ env.SKIA_COMMIT }}"
+          fi
           CONFIG="${{ matrix.config || 'Release' }}"
-          python3 build-skia.py ${{ matrix.platform }} -variant ${{ matrix.variant }} -config $CONFIG --shallow -branch ${{ env.SKIA_BRANCH }} $ARCH_ARG $TARGET_ARG $CRT_ARG
+          python3 build-skia.py ${{ matrix.platform }} -variant ${{ matrix.variant }} -config $CONFIG --shallow -branch ${{ env.SKIA_BRANCH }} $ARCH_ARG $TARGET_ARG $CRT_ARG $COMMIT_ARG
 
       - name: Set archive name
         if: steps.check.outputs.should_build == 'true'
