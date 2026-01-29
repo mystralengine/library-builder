@@ -24,34 +24,50 @@ rm -rf * .git 2>/dev/null
 git init
 ```
 
-### 2. Download the Original Source Files
+### 2. Find the Exact Upstream Commit
 
-Download the source files from the upstream repository. For Dawn (from Google Source):
+**CRITICAL:** You must download from the exact commit that Skia uses, not from the `main` branch. Skia pins specific commits in its DEPS file.
+
+```bash
+# Get the Dawn commit pinned by Skia
+curl -sL "https://skia.googlesource.com/skia/+/refs/heads/main/DEPS?format=TEXT" \
+  | base64 -d | grep '"third_party/externals/dawn"'
+
+# Output example:
+# "third_party/externals/dawn": "https://dawn.googlesource.com/dawn.git@e4582e1b1355c4af8ba1f85ad9fc98e516c4945b",
+```
+
+Extract the commit hash (e.g., `e4582e1b1355c4af8ba1f85ad9fc98e516c4945b`).
+
+### 3. Download the Original Source Files
+
+Download from the **exact commit** found in step 2:
 
 ```bash
 # Create the directory structure matching the target path
 mkdir -p third_party/externals/dawn/src/dawn/native/d3d11
 
-# Download the file (Google Source uses base64 encoding)
-curl -sL "https://dawn.googlesource.com/dawn/+/refs/heads/main/src/dawn/native/d3d11/SharedFenceD3D11.cpp?format=TEXT" \
+# Download from the EXACT commit (not main branch!)
+DAWN_COMMIT="e4582e1b1355c4af8ba1f85ad9fc98e516c4945b"
+curl -sL "https://dawn.googlesource.com/dawn/+/${DAWN_COMMIT}/src/dawn/native/d3d11/SharedFenceD3D11.cpp?format=TEXT" \
   | base64 -d > third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
 ```
 
 For GitHub-hosted repos:
 
 ```bash
-curl -sL "https://raw.githubusercontent.com/user/repo/main/path/to/file.cpp" \
+curl -sL "https://raw.githubusercontent.com/user/repo/<commit-hash>/path/to/file.cpp" \
   > path/to/file.cpp
 ```
 
-### 3. Commit the Original Files
+### 4. Commit the Original Files
 
 ```bash
 git add .
 git commit -m "Original source files"
 ```
 
-### 4. Make Your Changes
+### 5. Make Your Changes
 
 Edit the files to fix the issue. Use your preferred editor or sed/awk for simple changes:
 
@@ -63,13 +79,13 @@ sed -i '' 's/#include "dawn\/native\/d3d\/PlatformFunctions.h"/#include "dawn\/n
 
 Or simply edit the file directly with any text editor.
 
-### 5. Generate the Patch
+### 6. Generate the Patch
 
 ```bash
 git diff > ~/Projects/mystral/internal_packages/library-builder/patches/my-fix.patch
 ```
 
-### 6. Verify the Patch
+### 7. Verify the Patch
 
 Check that the patch looks correct:
 
@@ -95,23 +111,28 @@ This patch fixes a missing include that causes "incomplete type" errors:
 mkdir -p /tmp/dawn-patch && cd /tmp/dawn-patch
 git init
 
-# 2. Create directory structure
+# 2. Find the exact Dawn commit from Skia's DEPS
+DAWN_COMMIT=$(curl -sL "https://skia.googlesource.com/skia/+/refs/heads/main/DEPS?format=TEXT" \
+  | base64 -d | grep '"third_party/externals/dawn"' | sed 's/.*@\([^"]*\).*/\1/')
+echo "Dawn commit: $DAWN_COMMIT"
+
+# 3. Create directory structure
 mkdir -p third_party/externals/dawn/src/dawn/native/d3d11
 
-# 3. Download original files
-curl -sL "https://dawn.googlesource.com/dawn/+/refs/heads/main/src/dawn/native/d3d11/SharedFenceD3D11.cpp?format=TEXT" \
+# 4. Download original files FROM THE EXACT COMMIT
+curl -sL "https://dawn.googlesource.com/dawn/+/${DAWN_COMMIT}/src/dawn/native/d3d11/SharedFenceD3D11.cpp?format=TEXT" \
   | base64 -d > third_party/externals/dawn/src/dawn/native/d3d11/SharedFenceD3D11.cpp
 
-curl -sL "https://dawn.googlesource.com/dawn/+/refs/heads/main/src/dawn/native/d3d11/TextureD3D11.cpp?format=TEXT" \
+curl -sL "https://dawn.googlesource.com/dawn/+/${DAWN_COMMIT}/src/dawn/native/d3d11/TextureD3D11.cpp?format=TEXT" \
   | base64 -d > third_party/externals/dawn/src/dawn/native/d3d11/TextureD3D11.cpp
 
-# 4. Commit originals
-git add . && git commit -m "Original Dawn source"
+# 5. Commit originals
+git add . && git commit -m "Original Dawn source (commit ${DAWN_COMMIT:0:8})"
 
-# 5. Make changes (add BufferD3D11.h include to both files)
+# 6. Make changes (add BufferD3D11.h include to both files)
 # ... edit files ...
 
-# 6. Generate patch
+# 7. Generate patch
 git diff > patches/dawn-d3d11-buffer-include.patch
 ```
 
