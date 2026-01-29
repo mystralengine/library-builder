@@ -613,7 +613,17 @@ class SkiaBuildScript:
             gn_args += "is_official_build = true\n"
 
         if self.platform == "mac":
-            gn_args += f"target_cpu = \"{arch}\""
+            gn_args += f"target_cpu = \"{arch}\"\n"
+            # Set deployment target based on architecture:
+            # - arm64 (Apple Silicon): macOS 14.0 - all AS Macs support this
+            # - x64 (Intel): macOS 12.0 - support older Intel Macs
+            if arch == "arm64":
+                mac_min_version = "14.0"
+            else:
+                mac_min_version = "12.0"
+            gn_args += f'''extra_cflags = ["-mmacosx-version-min={mac_min_version}"]
+extra_ldflags = ["-mmacosx-version-min={mac_min_version}"]
+'''
         elif self.platform == "ios":
             cpu = "arm64" if arch == "arm64" else "x64"
             gn_args += f'target_cpu = "{cpu}"\n'

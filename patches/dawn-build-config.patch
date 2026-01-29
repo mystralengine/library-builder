@@ -85,8 +85,8 @@ index e23889e323..d193cf1476 100644
      # The D3D backend requires the HLSL writer.
      configure_cmd.append("-DTINT_BUILD_HLSL_WRITER=ON")
    else:
-@@ -152,6 +165,11 @@ def main():
- 
+@@ -152,6 +165,16 @@ def main():
+
    if target_os == "Darwin" or target_os == "iOS":
      configure_cmd.append(f"-DCMAKE_OSX_ARCHITECTURES={target_cpu}")
 +    if target_os == "iOS":
@@ -94,6 +94,11 @@ index e23889e323..d193cf1476 100644
 +      from cmake_utils import get_ios_settings
 +      ios_cfgs = get_ios_settings(target_cpu)
 +      configure_cmd += ios_cfgs
++    else:
++      # macOS: set deployment target based on architecture
++      from cmake_utils import get_macos_settings
++      macos_cfgs = get_macos_settings(target_cpu)
++      configure_cmd += macos_cfgs
  
    env = os.environ.copy()
    # Don't write .pyc files, which can cause race conditions when building
@@ -159,6 +164,22 @@ index f2fd635c18..65c1a8450b 100644
 +  ios_cfgs.append("-DTINT_BUILD_CMD_TOOLS=OFF")
 +
 +  return ios_cfgs
++
++
++def get_macos_settings(target_cpu):
++  """Get CMake settings for macOS builds.
++     Sets deployment target based on architecture."""
++  macos_cfgs = []
++
++  # Set deployment target based on architecture:
++  # - arm64 (Apple Silicon): macOS 14.0 - all AS Macs support this
++  # - x64 (Intel): macOS 12.0 - support older Intel Macs
++  if target_cpu == "arm64":
++    macos_cfgs.append("-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0")
++  else:
++    macos_cfgs.append("-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0")
++
++  return macos_cfgs
 +
 +
  def combine_into_library(args, output_path, build_dir, target_os, object_files):
