@@ -1,0 +1,33 @@
+diff --git a/third_party/externals/dawn/src/dawn/native/metal/QueueMTL.mm b/third_party/externals/dawn/src/dawn/native/metal/QueueMTL.mm
+index 4899ddb..d972cef 100644
+--- a/third_party/externals/dawn/src/dawn/native/metal/QueueMTL.mm
++++ b/third_party/externals/dawn/src/dawn/native/metal/QueueMTL.mm
+@@ -89,10 +89,13 @@ MaybeError Queue::Initialize() {
+             GetDevice()->IsToggleEnabled(Toggle::EnableShaderPrint)) {
+             // Add a logging callback to the command queue that forwards print output to the Dawn
+             // logging callback.
++            // Use NSClassFromString to avoid hard symbol references that cause dyld failures
++            // on older macOS versions (pre-14) that don't have these classes.
+             NSError* error = nil;
+-            MTLLogStateDescriptor* logStateDesc = [MTLLogStateDescriptor new];
+-            logStateDesc.bufferSize = 65536;
+-            logStateDesc.level = MTLLogLevelInfo;
++            Class logStateDescClass = NSClassFromString(@"MTLLogStateDescriptor");
++            id logStateDesc = [[logStateDescClass alloc] init];
++            [logStateDesc setValue:@65536 forKey:@"bufferSize"];
++            [logStateDesc setValue:@(MTLLogLevelInfo) forKey:@"level"];
+             id<MTLLogState> mtlLogState = [mtlDevice newLogStateWithDescriptor:logStateDesc
+                                                                          error:&error];
+             if (error != nil) {
+@@ -104,8 +107,9 @@ MaybeError Queue::Initialize() {
+                 GetDevice()->EmitLog([message UTF8String]);
+             }];
+ 
+-            MTLCommandQueueDescriptor* mtlQueueDescriptor = [MTLCommandQueueDescriptor new];
+-            mtlQueueDescriptor.logState = mtlLogState;
++            Class queueDescClass = NSClassFromString(@"MTLCommandQueueDescriptor");
++            id mtlQueueDescriptor = [[queueDescClass alloc] init];
++            [mtlQueueDescriptor setValue:mtlLogState forKey:@"logState"];
+             mCommandQueue.Acquire([mtlDevice newCommandQueueWithDescriptor:mtlQueueDescriptor]);
+         } else {
+             mCommandQueue.Acquire([mtlDevice newCommandQueue]);
