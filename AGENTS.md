@@ -111,6 +111,34 @@ Debugging steps:
 3. Test for breaking changes in GN args or build process
 4. Update documentation if successful
 
+## Writing Patches
+
+Patches in `patches/` are applied automatically during builds to fix upstream issues.
+
+**IMPORTANT: Never write patches manually.** Manually-written patches have wrong line numbers, missing space prefixes on blank lines, or other format issues that cause "corrupt patch" errors.
+
+**Always generate patches using git diff:**
+
+```bash
+# 1. Create temp repo with original files
+mkdir /tmp/patch && cd /tmp/patch && git init
+
+# 2. Download original from upstream (Dawn uses base64)
+mkdir -p third_party/externals/dawn/src/dawn/native/d3d11
+curl -sL "https://dawn.googlesource.com/dawn/+/refs/heads/main/src/dawn/native/d3d11/SomeFile.cpp?format=TEXT" \
+  | base64 -d > third_party/externals/dawn/src/dawn/native/d3d11/SomeFile.cpp
+
+# 3. Commit original
+git add . && git commit -m "Original"
+
+# 4. Make changes (edit files)
+
+# 5. Generate patch
+git diff > /path/to/library-builder/patches/my-fix.patch
+```
+
+See **[docs/writingpatches.md](docs/writingpatches.md)** for the complete guide.
+
 ## File Quick Reference
 
 | File | Purpose |

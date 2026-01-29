@@ -218,6 +218,32 @@ gh workflow run create-xcframework.yml -f release_tag=main-20260121
 - Cache key includes `build-skia.py` hash and branch name
 - Force cache rebuild by modifying `build-skia.py` or using different branch
 
+## Writing Patches
+
+Patches in `patches/` are applied automatically during builds to fix upstream issues. **Never write patches manually** - always generate them using git diff.
+
+See **[docs/writingpatches.md](docs/writingpatches.md)** for the complete guide.
+
+**Quick workflow:**
+```bash
+# 1. Create temp git repo with original source
+mkdir -p /tmp/patch-workspace && cd /tmp/patch-workspace
+git init
+
+# 2. Download original file from upstream
+mkdir -p path/to/file
+curl -sL "https://example.com/file.cpp" > path/to/file.cpp
+
+# 3. Commit original
+git add . && git commit -m "Original"
+
+# 4. Make your changes
+# ... edit file ...
+
+# 5. Generate patch
+git diff > /path/to/library-builder/patches/my-fix.patch
+```
+
 ## Release Artifacts
 
 Each release includes zip files with this naming convention:
