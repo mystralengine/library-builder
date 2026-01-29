@@ -1298,9 +1298,26 @@ extra_ldflags = ["-mmacosx-version-min={mac_min_version}"]
                     colored_print(f"  Patch {patch_file.name} already applied, skipping.", Colors.OKCYAN)
                     continue
 
-                # Apply the patch
-                subprocess.run(["git", "apply", str(patch_file)], check=True)
-                colored_print(f"  Applied {patch_file.name} successfully.", Colors.OKGREEN)
+                # Apply the patch with flexible options
+                # Try with reduced context matching first (-C1), then fallback to even more flexible options
+                apply_commands = [
+                    ["git", "apply", "--ignore-whitespace", str(patch_file)],
+                    ["git", "apply", "--ignore-whitespace", "-C1", str(patch_file)],
+                    ["git", "apply", "--ignore-whitespace", "-C0", str(patch_file)],
+                ]
+
+                applied = False
+                for cmd in apply_commands:
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        colored_print(f"  Applied {patch_file.name} successfully.", Colors.OKGREEN)
+                        applied = True
+                        break
+
+                if not applied:
+                    # Show the error from the last attempt
+                    colored_print(f"  Warning: Failed to apply {patch_file.name}", Colors.WARNING)
+                    colored_print(f"    Error: {result.stderr.strip()}", Colors.WARNING)
             except subprocess.CalledProcessError as e:
                 colored_print(f"  Warning: Failed to apply {patch_file.name}: {e}", Colors.WARNING)
 
