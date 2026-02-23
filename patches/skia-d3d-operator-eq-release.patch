@@ -1,0 +1,50 @@
+diff --git a/include/gpu/ganesh/d3d/GrD3DTypes.h b/include/gpu/ganesh/d3d/GrD3DTypes.h
+index 3e6fbcd..3bf316a 100644
+--- a/include/gpu/ganesh/d3d/GrD3DTypes.h
++++ b/include/gpu/ganesh/d3d/GrD3DTypes.h
+@@ -216,14 +216,12 @@ struct GrD3DTextureResourceInfo {
+             , fSampleQualityPattern(info.fSampleQualityPattern)
+             , fProtected(info.fProtected) {}
+ 
+-#if defined(GPU_TEST_UTILS)
+     bool operator==(const GrD3DTextureResourceInfo& that) const {
+         return fResource == that.fResource && fResourceState == that.fResourceState &&
+                fFormat == that.fFormat && fSampleCount == that.fSampleCount &&
+                fLevelCount == that.fLevelCount &&
+                fSampleQualityPattern == that.fSampleQualityPattern && fProtected == that.fProtected;
+     }
+-#endif
+ };
+ 
+ struct GrD3DFenceInfo {
+diff --git a/include/private/gpu/ganesh/GrD3DTypesMinimal.h b/include/private/gpu/ganesh/GrD3DTypesMinimal.h
+index 84db9c1..b74ac37 100644
+--- a/include/private/gpu/ganesh/GrD3DTypesMinimal.h
++++ b/include/private/gpu/ganesh/GrD3DTypesMinimal.h
+@@ -48,9 +48,7 @@ struct GrD3DBackendSurfaceInfo {
+     GrD3DTextureResourceInfo snapTextureResourceInfo() const;
+ 
+     bool isProtected() const;
+-#if defined(GPU_TEST_UTILS)
+     bool operator==(const GrD3DBackendSurfaceInfo& that) const;
+-#endif
+ 
+ private:
+     std::unique_ptr<GrD3DTextureResourceInfo> fTextureResourceInfo;
+diff --git a/src/gpu/ganesh/d3d/GrD3DTypesMinimal.cpp b/src/gpu/ganesh/d3d/GrD3DTypesMinimal.cpp
+index a8388a8..b2e5ac7 100644
+--- a/src/gpu/ganesh/d3d/GrD3DTypesMinimal.cpp
++++ b/src/gpu/ganesh/d3d/GrD3DTypesMinimal.cpp
+@@ -54,7 +54,6 @@ bool GrD3DBackendSurfaceInfo::isProtected() const {
+     return fTextureResourceInfo->fProtected == GrProtected::kYes;
+ }
+ 
+-#if defined(GPU_TEST_UTILS)
+ bool GrD3DBackendSurfaceInfo::operator==(const GrD3DBackendSurfaceInfo& that) const {
+     GrD3DTextureResourceInfo cpyInfoThis = *fTextureResourceInfo;
+     GrD3DTextureResourceInfo cpyInfoThat = *that.fTextureResourceInfo;
+@@ -64,4 +63,3 @@ bool GrD3DBackendSurfaceInfo::operator==(const GrD3DBackendSurfaceInfo& that) co
+     cpyInfoThat.fResourceState = D3D12_RESOURCE_STATE_COMMON;
+     return cpyInfoThis == cpyInfoThat && fResourceState == that.fResourceState;
+ }
+-#endif
