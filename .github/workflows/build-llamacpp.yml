@@ -201,7 +201,7 @@ jobs:
             - macOS arm64 (Metal)
             - macOS x86_64
             - iOS arm64 (Metal)
-            - Android arm64 (Vulkan)
+            - Android arm64 (CPU)
             - Windows x64 (static CRT /MT)
             - Linux x64 (CPU)
 
@@ -212,7 +212,7 @@ jobs:
 
             ## GPU Backends
             - macOS/iOS: Metal (embedded Metal library)
-            - Android: Vulkan
+            - Android: CPU only
             - Windows/Linux: CPU only (build with `-DGGML_CUDA=ON` for CUDA)
           files: |
             release/*.zip

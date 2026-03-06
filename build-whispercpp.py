@@ -107,6 +107,8 @@ def get_cmake_flags(platform, arch, config, ndk_path=None):
         elif arch in ("x64", "x86_64"):
             flags.append("-DCMAKE_OSX_ARCHITECTURES=x86_64")
         flags.append("-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0")
+        # Disable native CPU detection to avoid i8mm intrinsics on CI runners
+        flags.append("-DGGML_NATIVE=OFF")
         # Enable Metal + CoreML on macOS
         flags.append("-DGGML_METAL=ON")
         flags.append("-DGGML_METAL_EMBED_LIBRARY=ON")

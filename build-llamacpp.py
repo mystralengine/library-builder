@@ -106,6 +106,8 @@ def get_cmake_flags(platform, arch, config, ndk_path=None):
         elif arch in ("x64", "x86_64"):
             flags.append("-DCMAKE_OSX_ARCHITECTURES=x86_64")
         flags.append("-DCMAKE_OSX_DEPLOYMENT_TARGET=13.0")
+        # Disable native CPU detection to avoid i8mm intrinsics on CI runners
+        flags.append("-DGGML_NATIVE=OFF")
         # Enable Metal on macOS
         flags.append("-DGGML_METAL=ON")
         flags.append("-DGGML_METAL_EMBED_LIBRARY=ON")
@@ -123,6 +125,8 @@ def get_cmake_flags(platform, arch, config, ndk_path=None):
         flags.append("-DGGML_METAL_EMBED_LIBRARY=ON")
         # Disable features that don't work on iOS
         flags.append("-DGGML_OPENMP=OFF")
+        # Disable tools to avoid BUNDLE DESTINATION install errors
+        flags.append("-DLLAMA_BUILD_TOOLS=OFF")
         flags.extend(["-G", "Ninja"])
         flags.append("-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
 
@@ -140,8 +144,8 @@ def get_cmake_flags(platform, arch, config, ndk_path=None):
         }
         abi = abi_map.get(arch, "arm64-v8a")
         flags.append(f"-DANDROID_ABI={abi}")
-        # Enable Vulkan on Android
-        flags.append("-DGGML_VULKAN=ON")
+        # CPU-only on Android (Vulkan requires glslc which CI runners lack)
+        flags.append("-DGGML_VULKAN=OFF")
         flags.append("-DGGML_OPENMP=OFF")
         flags.extend(["-G", "Ninja"])
 
