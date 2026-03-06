@@ -1,0 +1,240 @@
+name: Build whisper.cpp
+run-name: Build whisper.cpp
+on:
+  workflow_dispatch:
+    inputs:
+      whispercpp_version:
+        description: 'whisper.cpp version/tag to build'
+        required: false
+        type: string
+        default: 'v1.7.5'
+      platforms:
+        description: 'Platforms to build (comma-separated or "all")'
+        required: false
+        type: string
+        default: 'all'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-whispercpp:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: macos-15-intel
+            platform: mac
+            arch: x86_64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    if: >-
+      inputs.platforms == 'all' ||
+      inputs.platforms == '' ||
+      contains(inputs.platforms, matrix.platform)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install ninja
+          fi
+
+      - name: Build whisper.cpp
+        shell: bash
+        run: |
+          python3 build-whispercpp.py ${{ matrix.platform }} \
+            -archs "${{ matrix.arch }}" \
+            -version "${{ inputs.whispercpp_version || 'v1.7.5' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts/lib
+
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="whispercpp-${PLATFORM}-${ARCH}"
+
+          # Copy libs
+          if [[ "$PLATFORM" == "win" ]]; then
+            cp build/whispercpp-win/lib/*.lib artifacts/lib/
+          elif [[ "$PLATFORM" == "mac" ]]; then
+            cp build/whispercpp-mac/lib/${ARCH}/*.a artifacts/lib/
+          else
+            cp build/whispercpp-${PLATFORM}/lib/*.a artifacts/lib/
+          fi
+
+          # Copy headers
+          cp -r build/include artifacts/
+
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  # iOS builds
+  build-whispercpp-ios:
+    runs-on: macos-latest
+    if: >-
+      inputs.platforms == 'all' ||
+      inputs.platforms == '' ||
+      contains(inputs.platforms, 'ios')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Build whisper.cpp for iOS
+        run: |
+          python3 build-whispercpp.py ios \
+            -archs arm64 \
+            -version "${{ inputs.whispercpp_version || 'v1.7.5' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts/lib
+          cp build/whispercpp-ios/lib/arm64/*.a artifacts/lib/
+          cp -r build/include artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whispercpp-ios-arm64
+          path: artifacts/
+
+  # Android builds
+  build-whispercpp-android:
+    runs-on: ubuntu-latest
+    if: >-
+      inputs.platforms == 'all' ||
+      inputs.platforms == '' ||
+      contains(inputs.platforms, 'android')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Set up Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build whisper.cpp for Android
+        run: |
+          python3 build-whispercpp.py android \
+            -archs arm64 \
+            -version "${{ inputs.whispercpp_version || 'v1.7.5' }}" \
+            -ndk "$ANDROID_NDK_HOME" \
+            -out build
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts/lib
+          cp build/whispercpp-android/lib/*.a artifacts/lib/
+          cp -r build/include artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whispercpp-android-arm64
+          path: artifacts/
+
+  create-release:
+    needs: [build-whispercpp, build-whispercpp-ios, build-whispercpp-android]
+    if: ${{ !inputs.skip_release && (inputs.platforms == 'all' || inputs.platforms == '') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: whispercpp-${{ inputs.whispercpp_version || 'v1.7.5' }}-${{ github.run_number }}
+          name: whisper.cpp ${{ inputs.whispercpp_version || 'v1.7.5' }} Build ${{ github.run_number }}
+          body: |
+            Automated whisper.cpp static library build.
+
+            **Version:** ${{ inputs.whispercpp_version || 'v1.7.5' }}
+
+            ## Platforms
+            - macOS arm64 (Metal)
+            - macOS x86_64
+            - iOS arm64 (Metal)
+            - Android arm64
+            - Windows x64 (static CRT /MT)
+            - Linux x64
+
+            ## Contents
+            Each archive contains:
+            - Static libraries (`libwhisper.a`, `libggml*.a` / `.lib` equivalents)
+            - Headers (`include/whispercpp/`)
+
+            ## GPU Backends
+            - macOS/iOS: Metal (embedded Metal library)
+            - Other platforms: CPU
+
+            ## Models
+            Download whisper models separately from:
+            https://huggingface.co/ggerganov/whisper.cpp
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false

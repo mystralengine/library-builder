@@ -1,0 +1,237 @@
+name: Build llama.cpp
+run-name: Build llama.cpp
+on:
+  workflow_dispatch:
+    inputs:
+      llamacpp_version:
+        description: 'llama.cpp version/tag to build'
+        required: false
+        type: string
+        default: 'b5604'
+      platforms:
+        description: 'Platforms to build (comma-separated or "all")'
+        required: false
+        type: string
+        default: 'all'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-llamacpp:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: macos-15-intel
+            platform: mac
+            arch: x86_64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    if: >-
+      inputs.platforms == 'all' ||
+      inputs.platforms == '' ||
+      contains(inputs.platforms, matrix.platform)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install ninja
+          fi
+
+      - name: Build llama.cpp
+        shell: bash
+        run: |
+          python3 build-llamacpp.py ${{ matrix.platform }} \
+            -archs "${{ matrix.arch }}" \
+            -version "${{ inputs.llamacpp_version || 'b5604' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts/lib
+
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="llamacpp-${PLATFORM}-${ARCH}"
+
+          # Copy libs
+          if [[ "$PLATFORM" == "win" ]]; then
+            cp build/llamacpp-win/lib/*.lib artifacts/lib/
+          elif [[ "$PLATFORM" == "mac" ]]; then
+            cp build/llamacpp-mac/lib/${ARCH}/*.a artifacts/lib/
+          else
+            cp build/llamacpp-${PLATFORM}/lib/*.a artifacts/lib/
+          fi
+
+          # Copy headers
+          cp -r build/include artifacts/
+
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  # iOS builds (macOS runner with cross-compilation)
+  build-llamacpp-ios:
+    runs-on: macos-latest
+    if: >-
+      inputs.platforms == 'all' ||
+      inputs.platforms == '' ||
+      contains(inputs.platforms, 'ios')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Build llama.cpp for iOS
+        run: |
+          python3 build-llamacpp.py ios \
+            -archs arm64 \
+            -version "${{ inputs.llamacpp_version || 'b5604' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts/lib
+          cp build/llamacpp-ios/lib/arm64/*.a artifacts/lib/
+          cp -r build/include artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llamacpp-ios-arm64
+          path: artifacts/
+
+  # Android builds (Ubuntu runner with NDK)
+  build-llamacpp-android:
+    runs-on: ubuntu-latest
+    if: >-
+      inputs.platforms == 'all' ||
+      inputs.platforms == '' ||
+      contains(inputs.platforms, 'android')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Set up Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build llama.cpp for Android
+        run: |
+          python3 build-llamacpp.py android \
+            -archs arm64 \
+            -version "${{ inputs.llamacpp_version || 'b5604' }}" \
+            -ndk "$ANDROID_NDK_HOME" \
+            -out build
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts/lib
+          cp build/llamacpp-android/lib/*.a artifacts/lib/
+          cp -r build/include artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llamacpp-android-arm64
+          path: artifacts/
+
+  create-release:
+    needs: [build-llamacpp, build-llamacpp-ios, build-llamacpp-android]
+    if: ${{ !inputs.skip_release && (inputs.platforms == 'all' || inputs.platforms == '') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: llamacpp-${{ inputs.llamacpp_version || 'b5604' }}-${{ github.run_number }}
+          name: llama.cpp ${{ inputs.llamacpp_version || 'b5604' }} Build ${{ github.run_number }}
+          body: |
+            Automated llama.cpp static library build.
+
+            **Version:** ${{ inputs.llamacpp_version || 'b5604' }}
+
+            ## Platforms
+            - macOS arm64 (Metal)
+            - macOS x86_64
+            - iOS arm64 (Metal)
+            - Android arm64 (Vulkan)
+            - Windows x64 (static CRT /MT)
+            - Linux x64 (CPU)
+
+            ## Contents
+            Each archive contains:
+            - Static libraries (`libllama.a`, `libggml*.a` / `.lib` equivalents)
+            - Headers (`include/llamacpp/`)
+
+            ## GPU Backends
+            - macOS/iOS: Metal (embedded Metal library)
+            - Android: Vulkan
+            - Windows/Linux: CPU only (build with `-DGGML_CUDA=ON` for CUDA)
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false
