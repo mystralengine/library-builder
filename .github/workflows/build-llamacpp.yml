@@ -8,11 +8,6 @@ on:
         required: false
         type: string
         default: 'b5604'
-      platforms:
-        description: 'Platforms to build (comma-separated or "all")'
-        required: false
-        type: string
-        default: 'all'
       skip_release:
         description: 'Skip creating release'
         required: false
@@ -46,10 +41,6 @@ jobs:
             arch: x64
 
     runs-on: ${{ matrix.os }}
-    if: >-
-      inputs.platforms == 'all' ||
-      inputs.platforms == '' ||
-      contains(inputs.platforms, matrix.platform)
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -108,10 +99,6 @@ jobs:
   # iOS builds (macOS runner with cross-compilation)
   build-llamacpp-ios:
     runs-on: macos-latest
-    if: >-
-      inputs.platforms == 'all' ||
-      inputs.platforms == '' ||
-      contains(inputs.platforms, 'ios')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -146,10 +133,6 @@ jobs:
   # Android builds (Ubuntu runner with NDK)
   build-llamacpp-android:
     runs-on: ubuntu-latest
-    if: >-
-      inputs.platforms == 'all' ||
-      inputs.platforms == '' ||
-      contains(inputs.platforms, 'android')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -187,7 +170,7 @@ jobs:
 
   create-release:
     needs: [build-llamacpp, build-llamacpp-ios, build-llamacpp-android]
-    if: ${{ !inputs.skip_release && (inputs.platforms == 'all' || inputs.platforms == '') }}
+    if: ${{ !inputs.skip_release }}
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
