@@ -588,8 +588,44 @@ class SkiaBuildScript:
             subprocess.run(["git", "clone", DEPOT_TOOLS_URL, str(DEPOT_TOOLS_PATH)], check=True)
         os.environ["PATH"] = f"{DEPOT_TOOLS_PATH}:{os.environ['PATH']}"
 
+    def reset_third_party_deps(self):
+        """Reset any dirty third_party dependency repos before syncing.
+
+        When builds are cached, patches from previous runs leave uncommitted
+        changes in third_party repos (e.g. Dawn). git-sync-deps fails to
+        checkout new revisions when these dirty files exist.
+        """
+        os.chdir(SKIA_SRC_DIR)
+        third_party_externals = SKIA_SRC_DIR / "third_party" / "externals"
+        if not third_party_externals.exists():
+            return
+
+        for dep_dir in third_party_externals.iterdir():
+            if dep_dir.is_dir() and (dep_dir / ".git").exists():
+                result = subprocess.run(
+                    ["git", "status", "--porcelain"],
+                    cwd=str(dep_dir), capture_output=True, text=True
+                )
+                if result.stdout.strip():
+                    colored_print(f"  Resetting dirty dep: {dep_dir.name}", Colors.WARNING)
+                    subprocess.run(["git", "checkout", "."], cwd=str(dep_dir), check=False)
+                    subprocess.run(["git", "clean", "-fd"], cwd=str(dep_dir), check=False)
+
+        # Also reset the top-level third_party/dawn if it exists
+        dawn_dir = SKIA_SRC_DIR / "third_party" / "dawn"
+        if dawn_dir.is_dir() and (dawn_dir / ".git").exists():
+            result = subprocess.run(
+                ["git", "status", "--porcelain"],
+                cwd=str(dawn_dir), capture_output=True, text=True
+            )
+            if result.stdout.strip():
+                colored_print(f"  Resetting dirty dep: third_party/dawn", Colors.WARNING)
+                subprocess.run(["git", "checkout", "."], cwd=str(dawn_dir), check=False)
+                subprocess.run(["git", "clean", "-fd"], cwd=str(dawn_dir), check=False)
+
     def sync_deps(self):
         os.chdir(SKIA_SRC_DIR)
+        self.reset_third_party_deps()
         colored_print("Syncing Deps...", Colors.OKBLUE)
         subprocess.run([sys.executable, "tools/git-sync-deps"], check=True)
 
