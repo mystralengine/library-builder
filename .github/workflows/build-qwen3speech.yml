@@ -1,0 +1,133 @@
+name: Build Qwen3 Speech
+run-name: Build Qwen3 Speech
+on:
+  workflow_dispatch:
+    inputs:
+      qwen3speech_version:
+        description: 'qwen3-asr-swift git branch/tag to build'
+        required: false
+        type: string
+        default: 'main'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-qwen3speech:
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Cache SwiftPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: third_party/qwen3-asr-swift-*/.build
+          key: qwen3speech-swiftpm-${{ runner.os }}-${{ inputs.qwen3speech_version || 'main' }}-${{ hashFiles('build-qwen3speech.py') }}
+          restore-keys: |
+            qwen3speech-swiftpm-${{ runner.os }}-${{ inputs.qwen3speech_version || 'main' }}-
+
+      - name: Build Qwen3 Speech
+        run: |
+          python3 build-qwen3speech.py mac \
+            -archs arm64 \
+            -version "${{ inputs.qwen3speech_version || 'main' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts
+
+          # Copy static libraries
+          cp build/qwen3speech-mac/lib/arm64/*.a artifacts/ 2>/dev/null || true
+
+          # Copy metallib
+          cp build/qwen3speech-mac/lib/arm64/mlx.metallib artifacts/ 2>/dev/null || true
+
+          # Copy Swift module interfaces
+          if [ -d "build/qwen3speech-mac/modules" ]; then
+            tar -czf artifacts/swift-modules.tar.gz -C build/qwen3speech-mac modules/
+          fi
+
+          # Copy source headers for reference
+          if [ -d "build/qwen3speech-mac/include" ]; then
+            tar -czf artifacts/swift-sources.tar.gz -C build/qwen3speech-mac include/
+          fi
+
+          echo "artifact_name=qwen3speech-mac-arm64" >> $GITHUB_ENV
+
+          echo "=== Artifacts ==="
+          ls -lh artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  create-release:
+    needs: build-qwen3speech
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: qwen3speech-${{ github.run_number }}
+          name: Qwen3 Speech Build ${{ github.run_number }}
+          body: |
+            Automated qwen3-asr-swift static library build for macOS Apple Silicon.
+
+            **Version:** ${{ inputs.qwen3speech_version || 'main' }}
+
+            ## Platform
+            - macOS arm64 (Apple Silicon + Metal GPU acceleration)
+
+            ## Contents
+            - Static libraries (.a) for all speech modules
+            - MLX Metal shader library (mlx.metallib)
+            - Swift module interfaces
+            - Swift source headers
+
+            ## Modules
+            - **Qwen3ASR** — Speech-to-text (52 languages)
+            - **Qwen3TTS** — Text-to-speech (highest quality)
+            - **CosyVoiceTTS** — Text-to-speech (streaming)
+            - **PersonaPlex** — Speech-to-speech (7B, full-duplex)
+            - **ParakeetASR** — Speech-to-text (CoreML)
+            - **SpeechVAD** — Voice activity detection
+            - **SpeechEnhancement** — Noise suppression
+            - **AudioCommon** — Shared audio protocols
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false

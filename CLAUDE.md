@@ -10,6 +10,7 @@ This repository (mystralengine/library-builder) provides Python scripts and GitH
 - **Skia** - 2D graphics library with GPU support (Dawn/Graphite/Metal/Vulkan)
 - **libwebp** - WebP codec for image encoding/decoding
 - **SWC** - Speedy Web Compiler for TypeScript compilation
+- **Moshi** - Speech-to-speech AI and Mimi neural audio codec (Rust/Candle)
 
 **Fork of:** [olilarkin/skia-builder](https://github.com/olilarkin/skia-builder)
 
@@ -20,6 +21,7 @@ This repository (mystralengine/library-builder) provides Python scripts and GitH
 | `build-skia.py` | Build Skia graphics library | macOS, iOS, visionOS, Android, Windows, Linux, WASM |
 | `build-webp.py` | Build libwebp codec | macOS, iOS, visionOS, Android, Windows, Linux, WASM |
 | `build-swc.py` | Build SWC TypeScript compiler | macOS (arm64, x86_64), Linux, Windows |
+| `build-moshi.py` | Build Moshi/Mimi speech AI codec | macOS (arm64, Metal), Linux (x64), Windows (x64) |
 
 ## Build Commands
 
@@ -272,6 +274,12 @@ Builds: `libwebp.a`, `libwebpdecoder.a`, `libwebpdemux.a`, `libwebpmux.a`, `libs
 gh workflow run build-swc.yml
 ```
 Builds Rust-based SWC compiler as static library for C++ integration.
+
+### Moshi (`build-moshi.yml`)
+```bash
+gh workflow run build-moshi.yml
+```
+Builds Moshi speech-to-speech AI and Mimi neural audio codec as static C libraries (Rust/Candle). Supports Metal on macOS.
 
 ### XCFramework from Release (`create-xcframework.yml`)
 ```bash

@@ -1,0 +1,139 @@
+name: Build Moshi
+run-name: Build Moshi
+on:
+  workflow_dispatch:
+    inputs:
+      moshi_version:
+        description: 'Moshi git tag to build'
+        required: false
+        type: string
+        default: 'moshi-v0.2.12'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-moshi:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: third_party/moshi-*/rust
+
+      - name: Build Moshi
+        shell: bash
+        run: |
+          python3 build-moshi.py ${{ matrix.platform }} \
+            -archs "${{ matrix.arch }}" \
+            -version "${{ inputs.moshi_version || 'moshi-v0.2.12' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="moshi-${PLATFORM}-${ARCH}"
+
+          # Copy static library
+          if [[ "$PLATFORM" == "mac" ]]; then
+            cp build/moshi-mac/lib/aarch64/libmoshi_ffi.a artifacts/
+            cp -f build/moshi-mac/lib/aarch64/libmoshi_ffi.dylib artifacts/ 2>/dev/null || true
+          elif [[ "$PLATFORM" == "win" ]]; then
+            cp build/moshi-win/lib/moshi_ffi.lib artifacts/
+            cp -f build/moshi-win/lib/moshi_ffi.dll artifacts/ 2>/dev/null || true
+          else
+            cp build/moshi-${PLATFORM}/lib/libmoshi_ffi.a artifacts/
+            cp -f build/moshi-${PLATFORM}/lib/libmoshi_ffi.so artifacts/ 2>/dev/null || true
+          fi
+
+          # Copy header
+          cp build/include/moshi/moshi.h artifacts/
+
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  create-release:
+    needs: build-moshi
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: moshi-${{ github.run_number }}
+          name: Moshi Static Build ${{ github.run_number }}
+          body: |
+            Automated Moshi/Mimi FFI static library build.
+
+            **Version:** ${{ inputs.moshi_version || 'moshi-v0.2.12' }}
+
+            ## Platforms
+            - macOS arm64 (Metal acceleration)
+            - Linux x64 (CPU)
+            - Windows x64 (CPU)
+
+            ## Contents
+            - `libmoshi_ffi.a` / `moshi_ffi.lib` - Static library
+            - `moshi.h` - C header
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false

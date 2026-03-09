@@ -9,3 +9,7 @@ example/build-*
 .claude/
 monitor_build.py
 third_party/swc-static/target/
+
+# Test binaries and outputs
+tests/test_moshi
+tests/*.wav
