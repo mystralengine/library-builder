@@ -787,6 +787,18 @@ extra_ldflags = ["-mmacosx-version-min={mac_min_version}"]
         # On Windows, ninja expects targets without the .lib extension
         if self.platform == "win":
             libs_to_build = [lib[:-4] if lib.endswith('.lib') else lib for lib in libs_to_build]
+
+        # On WASM, use GN target labels (strip lib prefix and .a suffix)
+        # Recent Skia changes may alter the output filename but GN labels are stable
+        if self.platform == "wasm":
+            def to_gn_label(lib):
+                name = lib
+                if name.startswith("lib"):
+                    name = name[3:]
+                if name.endswith(".a"):
+                    name = name[:-2]
+                return name
+            libs_to_build = [to_gn_label(lib) for lib in libs_to_build]
         
         # Construct the ninja command with all library targets
         ninja_command = ["ninja", "-C", str(output_dir)] + libs_to_build
@@ -832,6 +844,16 @@ extra_ldflags = ["-mmacosx-version-min={mac_min_version}"]
                 shutil.copy2(str(src_file), str(dest_file))
                 colored_print(f"Copied {lib} to {dest_dir}", Colors.OKGREEN)
                 src_file.unlink()
+            elif self.platform == "wasm" and lib.startswith("lib"):
+                # WASM output may omit the lib prefix (e.g. skia.a instead of libskia.a)
+                alt_name = lib[3:]  # strip "lib" prefix
+                alt_file = src_dir / alt_name
+                if alt_file.exists():
+                    shutil.copy2(str(alt_file), str(dest_file))
+                    colored_print(f"Copied {alt_name} as {lib} to {dest_dir}", Colors.OKGREEN)
+                    alt_file.unlink()
+                else:
+                    colored_print(f"Warning: {lib} not found in {src_dir}", Colors.WARNING)
             else:
                 colored_print(f"Warning: {lib} not found in {src_dir}", Colors.WARNING)
 
