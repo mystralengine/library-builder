@@ -96,80 +96,12 @@ jobs:
           name: ${{ env.artifact_name }}
           path: artifacts/
 
-  # iOS builds (macOS runner with cross-compilation)
-  build-sherpaonnx-ios:
-    runs-on: macos-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install Ninja
-        run: brew install ninja
-
-      - name: Build sherpa-onnx for iOS
-        run: |
-          python3 build-sherpaonnx.py ios \
-            -archs arm64 \
-            -version "${{ inputs.sherpaonnx_version || 'v1.12.30' }}" \
-            -out build
-
-      - name: Prepare Artifacts
-        run: |
-          mkdir -p artifacts/lib
-          cp build/sherpaonnx-ios/lib/arm64/*.a artifacts/lib/
-          cp -r build/include artifacts/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sherpaonnx-ios-arm64
-          path: artifacts/
-
-  # Android builds (Ubuntu runner with NDK)
-  build-sherpaonnx-android:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-
-      - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
-
-      - name: Set up Android NDK
-        uses: android-actions/setup-android@v3
-
-      - name: Build sherpa-onnx for Android
-        run: |
-          python3 build-sherpaonnx.py android \
-            -archs arm64 \
-            -version "${{ inputs.sherpaonnx_version || 'v1.12.30' }}" \
-            -ndk "$ANDROID_NDK_HOME" \
-            -out build
-
-      - name: Prepare Artifacts
-        run: |
-          mkdir -p artifacts/lib
-          cp build/sherpaonnx-android/lib/*.a artifacts/lib/
-          cp -r build/include artifacts/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sherpaonnx-android-arm64
-          path: artifacts/
+  # NOTE: iOS and Android are not yet supported — sherpa-onnx's cmake
+  # does not provide pre-built onnxruntime for those platforms.
+  # Re-add these jobs once upstream adds iOS/Android onnxruntime support.
 
   create-release:
-    needs: [build-sherpaonnx, build-sherpaonnx-ios, build-sherpaonnx-android]
+    needs: [build-sherpaonnx]
     if: ${{ !inputs.skip_release }}
     runs-on: ubuntu-latest
     steps:
@@ -200,8 +132,6 @@ jobs:
             ## Platforms
             - macOS arm64
             - macOS x86_64
-            - iOS arm64
-            - Android arm64 (CPU)
             - Windows x64 (static CRT /MT)
             - Linux x64 (CPU)
 
