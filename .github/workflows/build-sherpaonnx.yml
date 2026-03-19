@@ -1,0 +1,220 @@
+name: Build sherpa-onnx
+run-name: Build sherpa-onnx
+on:
+  workflow_dispatch:
+    inputs:
+      sherpaonnx_version:
+        description: 'sherpa-onnx version/tag to build'
+        required: false
+        type: string
+        default: 'v1.12.30'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-sherpaonnx:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: macos-15-intel
+            platform: mac
+            arch: x86_64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y ninja-build
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install ninja
+          fi
+
+      - name: Build sherpa-onnx
+        shell: bash
+        run: |
+          python3 build-sherpaonnx.py ${{ matrix.platform }} \
+            -archs "${{ matrix.arch }}" \
+            -version "${{ inputs.sherpaonnx_version || 'v1.12.30' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts/lib
+
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="sherpaonnx-${PLATFORM}-${ARCH}"
+
+          # Copy libs
+          if [[ "$PLATFORM" == "win" ]]; then
+            cp build/sherpaonnx-win/lib/*.lib artifacts/lib/
+          elif [[ "$PLATFORM" == "mac" ]]; then
+            cp build/sherpaonnx-mac/lib/${ARCH}/*.a artifacts/lib/
+          else
+            cp build/sherpaonnx-${PLATFORM}/lib/*.a artifacts/lib/
+          fi
+
+          # Copy headers
+          cp -r build/include artifacts/
+
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  # iOS builds (macOS runner with cross-compilation)
+  build-sherpaonnx-ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Build sherpa-onnx for iOS
+        run: |
+          python3 build-sherpaonnx.py ios \
+            -archs arm64 \
+            -version "${{ inputs.sherpaonnx_version || 'v1.12.30' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts/lib
+          cp build/sherpaonnx-ios/lib/arm64/*.a artifacts/lib/
+          cp -r build/include artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpaonnx-ios-arm64
+          path: artifacts/
+
+  # Android builds (Ubuntu runner with NDK)
+  build-sherpaonnx-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Set up Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Build sherpa-onnx for Android
+        run: |
+          python3 build-sherpaonnx.py android \
+            -archs arm64 \
+            -version "${{ inputs.sherpaonnx_version || 'v1.12.30' }}" \
+            -ndk "$ANDROID_NDK_HOME" \
+            -out build
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifacts/lib
+          cp build/sherpaonnx-android/lib/*.a artifacts/lib/
+          cp -r build/include artifacts/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpaonnx-android-arm64
+          path: artifacts/
+
+  create-release:
+    needs: [build-sherpaonnx, build-sherpaonnx-ios, build-sherpaonnx-android]
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sherpaonnx-${{ inputs.sherpaonnx_version || 'v1.12.30' }}-${{ github.run_number }}
+          name: sherpa-onnx ${{ inputs.sherpaonnx_version || 'v1.12.30' }} Build ${{ github.run_number }}
+          body: |
+            Automated sherpa-onnx static library build.
+
+            **Version:** ${{ inputs.sherpaonnx_version || 'v1.12.30' }}
+
+            ## Platforms
+            - macOS arm64
+            - macOS x86_64
+            - iOS arm64
+            - Android arm64 (CPU)
+            - Windows x64 (static CRT /MT)
+            - Linux x64 (CPU)
+
+            ## Contents
+            Each archive contains:
+            - Static libraries (sherpa-onnx-c-api, sherpa-onnx-core, onnxruntime, espeak-ng, piper_phonemize, etc.)
+            - Headers (`include/sherpaonnx/c-api.h`)
+
+            ## Features
+            - TTS only build (speech synthesis via KittenTTS, Kokoro, VITS, Matcha, etc.)
+            - No Python, PortAudio, JNI, or WebSocket dependencies
+            - CPU-only (no GPU/CUDA)
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false
