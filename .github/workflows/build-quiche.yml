@@ -32,6 +32,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Desktop
           - os: macos-latest
             platform: mac
             arch: arm64
@@ -43,6 +44,26 @@ jobs:
             arch: x64
           - os: windows-latest
             platform: win
+            arch: x64
+          # iOS (device + simulators) — built on macOS
+          - os: macos-latest
+            platform: ios
+            arch: arm64
+          - os: macos-latest
+            platform: ios
+            arch: sim-arm64
+          - os: macos-latest
+            platform: ios
+            arch: sim-x64
+          # Android (built on Linux via cargo-ndk)
+          - os: ubuntu-latest
+            platform: android
+            arch: arm64
+          - os: ubuntu-latest
+            platform: android
+            arch: armv7
+          - os: ubuntu-latest
+            platform: android
             arch: x64
 
     runs-on: ${{ matrix.os }}
@@ -76,8 +97,23 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/setup-nasm@v1
 
+      - name: Set up Android NDK
+        if: matrix.platform == 'android'
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r26d
+          local-cache: true
+
+      - name: Install cargo-ndk (Android)
+        if: matrix.platform == 'android'
+        run: cargo install cargo-ndk --locked
+
       - name: Build quiche
         shell: bash
+        env:
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
           python3 build-quiche.py ${{ matrix.platform }} \
             -archs "${{ matrix.arch }}" \
@@ -93,14 +129,15 @@ jobs:
           ARCH="${{ matrix.arch }}"
           NAME="quiche-${PLATFORM}-${ARCH}"
 
-          # Copy lib
-          if [[ "$PLATFORM" == "win" ]]; then
-            cp build/quiche-win/lib/quiche.lib artifacts/
-          elif [[ "$PLATFORM" == "mac" ]]; then
-            cp build/quiche-mac/lib/${ARCH}/libquiche.a artifacts/
-          else
-            cp build/quiche-${PLATFORM}/lib/libquiche.a artifacts/
-          fi
+          # Copy lib (path layout matches build-quiche.py output)
+          case "$PLATFORM" in
+            win)
+              cp build/quiche-win/lib/quiche.lib artifacts/ ;;
+            linux)
+              cp build/quiche-linux/lib/libquiche.a artifacts/ ;;
+            mac|ios|android)
+              cp build/quiche-${PLATFORM}/lib/${ARCH}/libquiche.a artifacts/ ;;
+          esac
 
           # Copy header (include/quiche.h)
           cp -r build/include artifacts/
@@ -148,12 +185,16 @@ jobs:
             Bundles BoringSSL.
 
             ## Platforms
-            - macOS arm64
-            - macOS x86_64
+            Desktop:
+            - macOS arm64 / x86_64
             - Windows x64
             - Linux x64
 
-            ## Contents
+            Mobile:
+            - iOS device (arm64), simulator (arm64 + x86_64)
+            - Android arm64-v8a, armeabi-v7a, x86_64
+
+            ## Contents (per zip)
             - `libquiche.a` / `quiche.lib` - Static library (BoringSSL bundled)
             - `include/quiche.h` - C header (patched)
 
