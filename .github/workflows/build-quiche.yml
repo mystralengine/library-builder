@@ -99,24 +99,18 @@ jobs:
         if: runner.os == 'Windows'
         uses: ilammy/setup-nasm@v1
 
-      - name: Set up Android NDK
-        if: matrix.platform == 'android'
-        uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r26d
-          local-cache: true
-
       - name: Install cargo-ndk (Android)
         if: matrix.platform == 'android'
         run: cargo install cargo-ndk --locked
 
       - name: Build quiche
         shell: bash
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-          ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: |
+          # Android: use the runner's preinstalled (complete) NDK. build-quiche.py
+          # picks ANDROID_NDK_HOME / _ROOT / _LATEST_HOME from the environment.
+          if [ "${{ matrix.platform }}" = "android" ]; then
+            echo "Using NDK: ${ANDROID_NDK_HOME:-$ANDROID_NDK_ROOT:-$ANDROID_NDK_LATEST_HOME}"
+          fi
           python3 build-quiche.py ${{ matrix.platform }} \
             -archs "${{ matrix.arch }}" \
             -version "${{ inputs.quiche_version || '0.24.6' }}" \
