@@ -142,9 +142,22 @@ def build_target(platform, arch, target, src_dir, release):
     env = os.environ.copy()
 
     if platform == "ios":
-        # cmake-rs cross-compiles BoringSSL for the iOS SDK automatically based on
-        # the cargo target; just pin the deployment target.
+        # Point cmake/clang at the correct SDK so BoringSSL (incl. its asm) is
+        # built for the right platform. cmake-rs does not reliably distinguish the
+        # arm64 *simulator* (aarch64-apple-ios-sim) from the arm64 device, so we
+        # set SDKROOT explicitly: simulator SDK for the *-sim and x86_64 targets,
+        # device SDK otherwise.
         env["IPHONEOS_DEPLOYMENT_TARGET"] = IOS_MIN_VERSION
+        is_sim = target.endswith("-sim") or target.startswith("x86_64-apple-ios")
+        sdk = "iphonesimulator" if is_sim else "iphoneos"
+        try:
+            sdk_path = subprocess.check_output(
+                ["xcrun", "--sdk", sdk, "--show-sdk-path"]
+            ).decode().strip()
+            if sdk_path:
+                env["SDKROOT"] = sdk_path
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
         cargo_cmd = ["cargo", "build", "--target", target,
                      "--package", "quiche", "--features", "ffi"]
         if release:
@@ -153,7 +166,9 @@ def build_target(platform, arch, target, src_dir, release):
 
     elif platform == "android":
         # cargo-ndk wires up the NDK toolchain (linker + cc/cmake env) so quiche's
-        # build.rs can cross-compile BoringSSL with the NDK.
+        # build.rs can cross-compile BoringSSL with the NDK. The API level is set
+        # via CARGO_NDK_PLATFORM (cargo-ndk's `-p` is cargo's --package, not the
+        # platform/API level).
         abi = ANDROID_ABIS.get(arch)
         if not abi:
             print(f"Unsupported Android arch: {arch}")
@@ -163,7 +178,8 @@ def build_target(platform, arch, target, src_dir, release):
         if ndk:
             env["ANDROID_NDK_HOME"] = ndk
             env["ANDROID_NDK_ROOT"] = ndk
-        cargo_cmd = ["cargo", "ndk", "-t", abi, "-p", ANDROID_API_LEVEL,
+        env["CARGO_NDK_PLATFORM"] = ANDROID_API_LEVEL
+        cargo_cmd = ["cargo", "ndk", "-t", abi,
                      "build", "--package", "quiche", "--features", "ffi"]
         if release:
             cargo_cmd.append("--release")

@@ -45,13 +45,15 @@ jobs:
           - os: windows-latest
             platform: win
             arch: x64
-          # iOS (device + simulators) — built on macOS
+          # iOS — built on macOS.
+          # NOTE: the arm64 *simulator* slice (sim-arm64) is temporarily disabled:
+          # BoringSSL's arm64 asm gets cross-compiled for device, not the
+          # simulator, and won't link into an iOS-simulator binary. Device arm64
+          # (real hardware) and the x86_64 simulator build fine. Tracked as a gap
+          # in docs/realtimecommunication.md.
           - os: macos-latest
             platform: ios
             arch: arm64
-          - os: macos-latest
-            platform: ios
-            arch: sim-arm64
           - os: macos-latest
             platform: ios
             arch: sim-x64
