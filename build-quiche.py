@@ -186,6 +186,14 @@ def build_target(platform, arch, target, src_dir, release):
         run_command(cargo_cmd, cwd=src_dir, env=env)
 
     else:  # desktop: mac / linux / win
+        if platform == "win":
+            # mystralnative links Windows with the STATIC MSVC runtime (/MT), like
+            # Skia/V8/Dawn. quiche + its bundled BoringSSL must match, otherwise
+            # linking fails with LNK2038 (MD_DynamicRelease vs MT_StaticRelease).
+            # The crt-static target-feature makes Rust use /MT and cmake-rs set
+            # CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded for the BoringSSL build.
+            existing = env.get("RUSTFLAGS", "")
+            env["RUSTFLAGS"] = (existing + " -C target-feature=+crt-static").strip()
         cargo_cmd = ["cargo", "build", "--target", target,
                      "--package", "quiche", "--features", "ffi"]
         if release:
