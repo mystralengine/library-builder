@@ -1,0 +1,172 @@
+name: Build quiche
+run-name: Build quiche
+on:
+  workflow_dispatch:
+    inputs:
+      quiche_version:
+        description: 'quiche version (git tag) to build'
+        required: false
+        type: string
+        default: '0.24.6'
+      release_suffix:
+        description: 'Build suffix for the release tag (e.g. 1, 2, 3)'
+        required: false
+        type: string
+        default: '1'
+      skip_release:
+        description: 'Skip creating release'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-quiche:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: macos-15-intel
+            platform: mac
+            arch: x86_64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: windows-latest
+            platform: win
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Go (for BoringSSL)
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Install CMake + Ninja (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update && sudo apt-get install -y cmake ninja-build
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install cmake ninja
+          fi
+
+      - name: Install NASM (Windows, for BoringSSL)
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+
+      - name: Build quiche
+        shell: bash
+        run: |
+          python3 build-quiche.py ${{ matrix.platform }} \
+            -archs "${{ matrix.arch }}" \
+            -version "${{ inputs.quiche_version || '0.24.6' }}" \
+            -out build
+
+      - name: Prepare Artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          NAME="quiche-${PLATFORM}-${ARCH}"
+
+          # Copy lib
+          if [[ "$PLATFORM" == "win" ]]; then
+            cp build/quiche-win/lib/quiche.lib artifacts/
+          elif [[ "$PLATFORM" == "mac" ]]; then
+            cp build/quiche-mac/lib/${ARCH}/libquiche.a artifacts/
+          else
+            cp build/quiche-${PLATFORM}/lib/libquiche.a artifacts/
+          fi
+
+          # Copy header (include/quiche.h)
+          cp -r build/include artifacts/
+
+          echo "artifact_name=${NAME}" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.artifact_name }}
+          path: artifacts/
+
+  create-release:
+    needs: build-quiche
+    if: ${{ !inputs.skip_release }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: downloaded_artifacts
+
+      - name: Package Release
+        run: |
+          mkdir -p release
+          for dir in downloaded_artifacts/*/; do
+            dirname=$(basename "$dir")
+            echo "Packaging $dirname..."
+            (cd "$dir" && zip -r "../../release/${dirname}.zip" .)
+          done
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: quiche-${{ inputs.quiche_version || '0.24.6' }}-${{ inputs.release_suffix || '1' }}
+          name: quiche ${{ inputs.quiche_version || '0.24.6' }} Build ${{ inputs.release_suffix || '1' }}
+          body: |
+            Automated quiche (QUIC + HTTP/3) static library build for the
+            Mystral Engine WebTransport backend.
+
+            **Version:** ${{ inputs.quiche_version || '0.24.6' }}
+
+            Built with the `ffi` feature and a patch exposing
+            `quiche_h3_config_set_additional_settings` (for WebTransport SETTINGS).
+            Bundles BoringSSL.
+
+            ## Platforms
+            - macOS arm64
+            - macOS x86_64
+            - Windows x64
+            - Linux x64
+
+            ## Contents
+            - `libquiche.a` / `quiche.lib` - Static library (BoringSSL bundled)
+            - `include/quiche.h` - C header (patched)
+
+            ## Usage
+            ```cmake
+            add_library(quiche STATIC IMPORTED)
+            set_target_properties(quiche PROPERTIES
+                IMPORTED_LOCATION ${QUICHE_DIR}/libquiche.a
+                INTERFACE_INCLUDE_DIRECTORIES ${QUICHE_DIR}/include
+            )
+            target_link_libraries(your_target PRIVATE quiche)
+            ```
+          files: |
+            release/*.zip
+          draft: false
+          prerelease: false

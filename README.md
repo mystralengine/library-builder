@@ -6,6 +6,9 @@ This repository provides automated builds of static libraries for [Mystral Engin
 - [Skia](https://skia.org/) - 2D graphics library with Dawn/Graphite support
 - [libwebp](https://chromium.googlesource.com/webm/libwebp/) - WebP codec to encode & decode images in WebP format
 - [swc](https://github.com/swc-project/swc) - Speedy Web Compiler to compile typescript.
+- [libuv](https://libuv.org/) - Async I/O event loop (non-blocking network, file, timers).
+- [Draco](https://github.com/google/draco) - Mesh compression (native glTF Draco decoding).
+- [quiche](https://github.com/cloudflare/quiche) - QUIC + HTTP/3, the native backend for the WebTransport API. Built with the `ffi` feature plus a small patch exposing WebTransport SETTINGS; bundles BoringSSL.
 
 **Planned:**
 - V8 - JavaScript engine. Currently using older build from https://github.com/kuoruan/libv8

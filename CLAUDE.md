@@ -22,6 +22,7 @@ This repository (mystralengine/library-builder) provides Python scripts and GitH
 | `build-webp.py` | Build libwebp codec | macOS, iOS, visionOS, Android, Windows, Linux, WASM |
 | `build-swc.py` | Build SWC TypeScript compiler | macOS (arm64, x86_64), Linux, Windows |
 | `build-moshi.py` | Build Moshi/Mimi speech AI codec | macOS (arm64, Metal), Linux (x64), Windows (x64) |
+| `build-quiche.py` | Build quiche (QUIC + HTTP/3) for WebTransport | macOS (arm64, x86_64), Linux (x64), Windows (x64) |
 
 ## Build Commands
 
@@ -280,6 +281,14 @@ Builds Rust-based SWC compiler as static library for C++ integration.
 gh workflow run build-moshi.yml
 ```
 Builds Moshi speech-to-speech AI and Mimi neural audio codec as static C libraries (Rust/Candle). Supports Metal on macOS.
+
+### quiche (`build-quiche.yml`)
+```bash
+gh workflow run build-quiche.yml
+# Cut a specific release suffix (bump for each rebuild):
+gh workflow run build-quiche.yml -f quiche_version=0.24.6 -f release_suffix=1
+```
+Builds Cloudflare quiche (QUIC + HTTP/3) as a static library (`libquiche.a` / `quiche.lib`) with the `ffi` feature, for the Mystral Engine WebTransport backend. Clones quiche `--recursive` (BoringSSL submodule) and applies `patches/quiche-webtransport-ffi.patch` (exposes `quiche_h3_config_set_additional_settings` for WebTransport SETTINGS). Requires Rust + cmake + Go (BoringSSL) and NASM on Windows. Release tag: `quiche-<version>-<suffix>`. Consumed by `mystralnative`'s `download-deps.mjs`.
 
 ### XCFramework from Release (`create-xcframework.yml`)
 ```bash
