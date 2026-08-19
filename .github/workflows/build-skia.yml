@@ -111,6 +111,10 @@ jobs:
             platform: linux
             variant: gpu
             arch: x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            variant: gpu
+            arch: arm64
           # WASM builds
           - os: ubuntu-latest
             platform: wasm
@@ -203,11 +207,20 @@ jobs:
         run: git config --global init.defaultBranch main
 
       - name: Install LLVM and Clang
-        if: steps.check.outputs.should_build == 'true' && runner.os != 'macOS' && matrix.os != 'windows-11-arm'
+        if: steps.check.outputs.should_build == 'true' && runner.os != 'macOS' && matrix.os != 'windows-11-arm' && matrix.os != 'ubuntu-24.04-arm'
         uses: KyleMayes/install-llvm-action@v2
         with:
           version: "19.1.0"
           env: true
+
+      # install-llvm-action has no aarch64-linux asset mapping, and Skia's gn args
+      # just use `cc = "clang"` from PATH, so the distro toolchain is enough here.
+      - name: Install LLVM and Clang (Linux ARM64)
+        if: steps.check.outputs.should_build == 'true' && matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld
+          clang --version
 
       - name: Install LLVM and Clang (Windows ARM64)
         if: steps.check.outputs.should_build == 'true' && matrix.os == 'windows-11-arm'

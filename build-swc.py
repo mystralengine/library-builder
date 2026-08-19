@@ -24,6 +24,8 @@ def get_rust_target(platform, arch):
     elif platform == "linux":
         if arch == "x64" or arch == "x86_64":
             return "x86_64-unknown-linux-gnu"
+        elif arch in ("arm64", "aarch64"):
+            return "aarch64-unknown-linux-gnu"
     elif platform == "win":
         if arch == "x64" or arch == "x86_64":
             return "x86_64-pc-windows-msvc"
