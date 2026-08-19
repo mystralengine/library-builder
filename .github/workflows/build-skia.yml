@@ -31,6 +31,11 @@ on:
         required: false
         type: boolean
         default: false
+      force_release:
+        description: 'Publish a release even when only some platforms were built. The release will contain just those platforms.'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -409,7 +414,10 @@ jobs:
           path: Skia.xcframework.zip
 
   create-release:
-    if: ${{ !inputs.skip_release && (inputs.platforms == 'all' || inputs.platforms == '') }}
+    # !cancelled() is required so this still runs on a partial build, where
+    # create-xcframework is skipped -- a skipped `needs` job would otherwise skip
+    # this one too. build-skia must still have actually succeeded.
+    if: ${{ !cancelled() && needs.build-skia.result == 'success' && !inputs.skip_release && (inputs.platforms == 'all' || inputs.platforms == '' || inputs.force_release) }}
     needs: [build-skia, create-xcframework]
     runs-on: ubuntu-latest
     steps:
@@ -436,6 +444,7 @@ jobs:
             ## Skia Build - ${{ steps.tag.outputs.tag }}
 
             Built from Skia branch: `${{ needs.build-skia.outputs.skia_branch }}`
+            ${{ inputs.force_release && format('> **Partial release.** Only these platforms were built: `{0}`. The platform list below describes the full matrix; assets missing from this release were not produced by this run.', inputs.platforms) || '' }}
 
             ### Platforms
 
@@ -449,8 +458,9 @@ jobs:
             - Release/Debug with static CRT (/MT, /MTd)
             - Release/Debug with dynamic CRT (/MD, /MDd)
 
-            **Linux x64:**
-            - Release build
+            **Linux:**
+            - x64 Release build
+            - arm64 Release build
 
             **Android:**
             - arm64, arm, x64 builds
@@ -478,6 +488,7 @@ jobs:
             ./skia-build-win-x64-dynamic-gpu-release/skia-build-win-x64-dynamic-gpu-release.zip
             ./skia-build-win-x64-dynamic-gpu-debug/skia-build-win-x64-dynamic-gpu-debug.zip
             ./skia-build-linux-x64-gpu-release/skia-build-linux-x64-gpu-release.zip
+            ./skia-build-linux-arm64-gpu-release/skia-build-linux-arm64-gpu-release.zip
             ./skia-build-wasm-wasm32-gpu-release/skia-build-wasm-wasm32-gpu-release.zip
             ./skia-build-android-arm64-gpu-release/skia-build-android-arm64-gpu-release.zip
             ./skia-build-android-arm-gpu-release/skia-build-android-arm-gpu-release.zip
