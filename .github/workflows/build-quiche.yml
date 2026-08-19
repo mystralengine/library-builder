@@ -9,10 +9,10 @@ on:
         type: string
         default: '0.24.6'
       release_suffix:
-        description: 'Build suffix for the release tag (e.g. 1, 2, 3)'
+        description: 'Build suffix for the release tag. Defaults to the run number; only set this to deliberately re-publish an existing tag.'
         required: false
         type: string
-        default: '1'
+        default: ''
       skip_release:
         description: 'Skip creating release'
         required: false
@@ -171,8 +171,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: quiche-${{ inputs.quiche_version || '0.24.6' }}-${{ inputs.release_suffix || '1' }}
-          name: quiche ${{ inputs.quiche_version || '0.24.6' }} Build ${{ inputs.release_suffix || '1' }}
+          tag_name: quiche-${{ inputs.quiche_version || '0.24.6' }}-${{ inputs.release_suffix || github.run_number }}
+          name: quiche ${{ inputs.quiche_version || '0.24.6' }} Build ${{ inputs.release_suffix || github.run_number }}
           body: |
             Automated quiche (QUIC + HTTP/3) static library build for the
             Mystral Engine WebTransport backend.
